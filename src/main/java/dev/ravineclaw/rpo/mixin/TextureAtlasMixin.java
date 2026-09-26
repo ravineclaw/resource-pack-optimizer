@@ -2,19 +2,19 @@ package dev.ravineclaw.rpo.mixin;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.platform.NativeImage;
-import com.mojang.blaze3d.systems.CommandEncoder;
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.textures.GpuTexture;
 import dev.ravineclaw.rpo.AtlasBuilder;
 import dev.ravineclaw.rpo.AtlasReuse;
 import dev.ravineclaw.rpo.ReloadChanges;
 import dev.ravineclaw.rpo.ResourcePackOptimizer;
+import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.client.renderer.texture.SpriteLoader;
 import net.minecraft.client.renderer.texture.TextureAtlas;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.annotations.Nullable;
+import org.lwjgl.system.MemoryUtil;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -76,18 +76,24 @@ public abstract class TextureAtlasMixin {
 		method = "upload",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet/minecraft/client/renderer/texture/TextureAtlasSprite;uploadFirstFrame(Lcom/mojang/blaze3d/textures/GpuTexture;)V"
+			target = "Lnet/minecraft/client/renderer/texture/TextureAtlasSprite;uploadFirstFrame()V"
 		)
 	)
-	private void rpo$uploadPrebuilt(final TextureAtlasSprite sprite, final GpuTexture texture, final Operation<Void> original) {
+	private void rpo$uploadPrebuilt(final TextureAtlasSprite sprite, final Operation<Void> original) {
 		AtlasBuilder.Built built = this.rpo$prebuilt;
 		if (built != null && !this.rpo$tilesWritten) {
 			try {
-				CommandEncoder encoder = RenderSystem.getDevice().createCommandEncoder();
+				GlStateManager._bindTexture(((AbstractTexture)(Object)this).getId());
+				GlStateManager._pixelStore(3314, 0);
+				GlStateManager._pixelStore(3316, 0);
+				GlStateManager._pixelStore(3315, 0);
+				NativeImage.Format.RGBA.setUnpackPixelStoreState();
 				AtlasBuilder.Level[] levels = built.levels();
 				for (int level = 0; level < levels.length; level++) {
 					for (AtlasBuilder.Tile tile : levels[level].tiles()) {
-						encoder.writeToTexture(texture, tile.pixels().asIntBuffer(), NativeImage.Format.RGBA, level, tile.x(), tile.y(), tile.width(), tile.height());
+						GlStateManager._texSubImage2D(
+							3553, level, tile.x(), tile.y(), tile.width(), tile.height(), NativeImage.Format.RGBA.glFormat(), 5121, MemoryUtil.memAddress(tile.pixels())
+						);
 					}
 				}
 
@@ -103,7 +109,7 @@ public abstract class TextureAtlasMixin {
 			return;
 		}
 
-		original.call(sprite, texture);
+		original.call(sprite);
 	}
 
 	@Inject(method = "upload", at = @At("RETURN"))

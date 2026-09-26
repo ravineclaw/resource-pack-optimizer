@@ -8,36 +8,38 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import net.minecraft.server.packs.resources.PreparableReloadListener;
+import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimpleReloadInstance;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+import org.spongepowered.asm.mixin.injection.ModifyArg;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(SimpleReloadInstance.class)
 public abstract class SimpleReloadInstanceMixin {
-	@Inject(method = "prepareTasks", at = @At("HEAD"))
-	private void rpo$startTimeline(final CallbackInfoReturnable<CompletableFuture<?>> cir) {
+	@Inject(method = "<init>", at = @At(value = "INVOKE", target = "Lcom/google/common/collect/Lists;newArrayList()Ljava/util/ArrayList;"))
+	private void rpo$startTimeline(final CallbackInfo ci) {
 		if (ReloadTimeline.ENABLED) {
 			ReloadTimeline.begin();
 		}
 	}
 
-	@WrapOperation(
-		method = "prepareTasks",
+	@ModifyArg(
+		method = "<init>",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet/minecraft/server/packs/resources/SimpleReloadInstance;createBarrierForListener(Lnet/minecraft/server/packs/resources/PreparableReloadListener;Ljava/util/concurrent/CompletableFuture;Ljava/util/concurrent/Executor;)Lnet/minecraft/server/packs/resources/PreparableReloadListener$PreparationBarrier;"
-		)
+			target = "Lnet/minecraft/server/packs/resources/SimpleReloadInstance$StateFactory;create(Lnet/minecraft/server/packs/resources/PreparableReloadListener$PreparationBarrier;Lnet/minecraft/server/packs/resources/ResourceManager;Lnet/minecraft/server/packs/resources/PreparableReloadListener;Ljava/util/concurrent/Executor;Ljava/util/concurrent/Executor;)Ljava/util/concurrent/CompletableFuture;"
+		),
+		index = 0
 	)
 	private PreparableReloadListener.PreparationBarrier rpo$timePreparation(
-		final SimpleReloadInstance<?> self,
+		final PreparableReloadListener.PreparationBarrier barrier,
+		final ResourceManager manager,
 		final PreparableReloadListener listener,
-		final CompletableFuture<?> previousBarrier,
-		final Executor mainThreadExecutor,
-		final Operation<PreparableReloadListener.PreparationBarrier> original
+		final Executor taskExecutor,
+		final Executor reloadExecutor
 	) {
-		PreparableReloadListener.PreparationBarrier barrier = original.call(self, listener, previousBarrier, mainThreadExecutor);
 		if (!ReloadTimeline.ENABLED) {
 			return barrier;
 		}
@@ -45,7 +47,7 @@ public abstract class SimpleReloadInstanceMixin {
 		return ReloadTimeline.timed(listener, barrier);
 	}
 
-	@WrapOperation(method = "prepareTasks", at = @At(value = "INVOKE", target = "Ljava/util/List;add(Ljava/lang/Object;)Z"))
+	@WrapOperation(method = "<init>", at = @At(value = "INVOKE", target = "Ljava/util/List;add(Ljava/lang/Object;)Z"))
 	private boolean rpo$timeApply(
 		final List<Object> steps, final Object step, final Operation<Boolean> original, @Local final PreparableReloadListener listener
 	) {

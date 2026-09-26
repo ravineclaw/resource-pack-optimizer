@@ -5,6 +5,7 @@
 	"plugin": "dev.ravineclaw.rpo.mixin.RpoMixinPlugin",
 	"client": [
 		"ColorMapListenerMixin",
+		"CompilationCacheMixin",
 		"CompositePackResourcesAccessor",
 		"FilePackResourcesMixin",
 		"FileResourcesSupplierAccessor",
@@ -17,6 +18,7 @@
 		"LoadingOverlayMixin",
 		"ModelManagerMixin",
 		"MultiPackResourceManagerMixin",
+		"NativeImageAccessor",
 		"PackMixin",
 		"PathPackResourcesAccessor",
 		"PathResourcesSupplierAccessor",

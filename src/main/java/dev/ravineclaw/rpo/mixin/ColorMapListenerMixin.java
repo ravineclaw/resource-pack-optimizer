@@ -2,7 +2,6 @@ package dev.ravineclaw.rpo.mixin;
 
 import dev.ravineclaw.rpo.ReloadChanges;
 import java.util.Arrays;
-import net.minecraft.client.resources.DryFoliageColorReloadListener;
 import net.minecraft.client.resources.FoliageColorReloadListener;
 import net.minecraft.client.resources.GrassColorReloadListener;
 import net.minecraft.server.packs.resources.ResourceManager;
@@ -14,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-@Mixin({GrassColorReloadListener.class, FoliageColorReloadListener.class, DryFoliageColorReloadListener.class})
+@Mixin({GrassColorReloadListener.class, FoliageColorReloadListener.class})
 public abstract class ColorMapListenerMixin {
 	@Unique
 	private int @Nullable [] rpo$previous;
@@ -23,7 +22,7 @@ public abstract class ColorMapListenerMixin {
 	private void rpo$compare(final int[] pixels, final ResourceManager manager, final ProfilerFiller profiler, final CallbackInfo ci) {
 		if (this.rpo$previous != null && Arrays.equals(this.rpo$previous, pixels)) {
 			Object self = this;
-			String name = self instanceof GrassColorReloadListener ? "grass" : self instanceof FoliageColorReloadListener ? "foliage" : "dry_foliage";
+			String name = self instanceof GrassColorReloadListener ? "grass" : "foliage";
 			ReloadChanges.unchanged("colormap:" + name);
 		}
 

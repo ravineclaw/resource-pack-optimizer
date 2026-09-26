@@ -1,6 +1,7 @@
 package dev.ravineclaw.rpo;
 
 import com.mojang.blaze3d.platform.NativeImage;
+import dev.ravineclaw.rpo.mixin.NativeImageAccessor;
 import dev.ravineclaw.rpo.mixin.SpriteContentsAccessor;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -167,7 +168,7 @@ public final class AtlasBuilder {
 		boolean[] used = new boolean[tilesX * tilesY];
 
 		try (NativeImage target = new NativeImage(NativeImage.Format.RGBA, levelWidth, levelHeight, true)) {
-			long targetBase = target.getPointer();
+			long targetBase = ((NativeImageAccessor)(Object)target).rpo$getPixels();
 			long targetStride = (long)levelWidth * 4L;
 
 			for (TextureAtlasSprite sprite : sprites) {
@@ -185,7 +186,7 @@ public final class AtlasBuilder {
 					return null;
 				}
 
-				long sourceBase = source.getPointer();
+				long sourceBase = ((NativeImageAccessor)(Object)source).rpo$getPixels();
 				long sourceStride = (long)sourceWidth * 4L;
 				for (int dy = 0; dy < sourceHeight; dy++) {
 					MemoryUtil.memCopy(sourceBase + dy * sourceStride, targetBase + (originY + dy) * targetStride + (long)originX * 4L, sourceStride);
