@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.PackResources;
 import net.minecraft.server.packs.PackType;
 import net.minecraft.server.packs.VanillaPackResources;
@@ -38,7 +38,7 @@ public abstract class VanillaPackResourcesMixin implements ImmutablePack {
 	@Unique
 	private volatile Boolean rpo$immutable;
 	@Unique
-	private final Map<String, List<Map.Entry<Identifier, IoSupplier<InputStream>>>> rpo$listings = new ConcurrentHashMap<>();
+	private final Map<String, List<Map.Entry<ResourceLocation, IoSupplier<InputStream>>>> rpo$listings = new ConcurrentHashMap<>();
 	@Unique
 	private final Map<String, Optional<IoSupplier<InputStream>>> rpo$lookups = new ConcurrentHashMap<>();
 
@@ -46,7 +46,7 @@ public abstract class VanillaPackResourcesMixin implements ImmutablePack {
 	public abstract void listResources(PackType type, String namespace, String directory, PackResources.ResourceOutput output);
 
 	@Shadow
-	public abstract IoSupplier<InputStream> getResource(PackType type, Identifier location);
+	public abstract IoSupplier<InputStream> getResource(PackType type, ResourceLocation location);
 
 	@Override
 	public boolean rpo$isImmutable() {
@@ -79,9 +79,9 @@ public abstract class VanillaPackResourcesMixin implements ImmutablePack {
 		}
 
 		String key = type.name() + '\n' + namespace + '\n' + directory;
-		List<Map.Entry<Identifier, IoSupplier<InputStream>>> listing = this.rpo$listings.get(key);
+		List<Map.Entry<ResourceLocation, IoSupplier<InputStream>>> listing = this.rpo$listings.get(key);
 		if (listing == null) {
-			List<Map.Entry<Identifier, IoSupplier<InputStream>>> collected = new ArrayList<>();
+			List<Map.Entry<ResourceLocation, IoSupplier<InputStream>>> collected = new ArrayList<>();
 			RPO_BYPASS.set(Boolean.TRUE);
 			try {
 				this.listResources(type, namespace, directory, (id, resource) -> collected.add(Map.entry(id, resource)));
@@ -93,7 +93,7 @@ public abstract class VanillaPackResourcesMixin implements ImmutablePack {
 			this.rpo$listings.putIfAbsent(key, listing);
 		}
 
-		for (Map.Entry<Identifier, IoSupplier<InputStream>> entry : listing) {
+		for (Map.Entry<ResourceLocation, IoSupplier<InputStream>> entry : listing) {
 			output.accept(entry.getKey(), entry.getValue());
 		}
 
@@ -101,7 +101,7 @@ public abstract class VanillaPackResourcesMixin implements ImmutablePack {
 	}
 
 	@Inject(method = "getResource", at = @At("HEAD"), cancellable = true)
-	private void rpo$cachedGetResource(final PackType type, final Identifier location, final CallbackInfoReturnable<IoSupplier<InputStream>> cir) {
+	private void rpo$cachedGetResource(final PackType type, final ResourceLocation location, final CallbackInfoReturnable<IoSupplier<InputStream>> cir) {
 		if (RPO_BYPASS.get() || !this.rpo$isImmutable()) {
 			return;
 		}

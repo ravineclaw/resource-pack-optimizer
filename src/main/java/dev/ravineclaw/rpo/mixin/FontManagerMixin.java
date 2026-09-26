@@ -5,6 +5,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import dev.ravineclaw.rpo.InputRecording;
 import dev.ravineclaw.rpo.ListenerReuse;
 import dev.ravineclaw.rpo.ReuseGuard;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import net.minecraft.client.gui.font.FontManager;
@@ -30,9 +31,9 @@ public abstract class FontManagerMixin {
 
 	@Inject(method = "reload", at = @At("HEAD"), cancellable = true)
 	private void rpo$keepUnchanged(
-		final PreparableReloadListener.SharedState currentReload,
-		final Executor taskExecutor,
 		final PreparableReloadListener.PreparationBarrier preparationBarrier,
+		final ResourceManager manager,
+		final Executor taskExecutor,
 		final Executor reloadExecutor,
 		final CallbackInfoReturnable<CompletableFuture<Void>> cir
 	) {
@@ -41,7 +42,6 @@ public abstract class FontManagerMixin {
 			return;
 		}
 
-		ResourceManager manager = currentReload.resourceManager();
 		if (!InputRecording.isTrackable(manager) || !ReuseGuard.untouched("fonts", ReuseGuard.FONTS)) {
 			this.rpo$applied = null;
 			this.rpo$pending = null;
@@ -49,7 +49,7 @@ public abstract class FontManagerMixin {
 		}
 
 		FontManager self = (FontManager)(Object)this;
-		cir.setReturnValue(ListenerReuse.canKeep(this.rpo$applied, currentReload, taskExecutor).thenCompose(keep -> {
+		cir.setReturnValue(ListenerReuse.canKeep(this.rpo$applied, manager, List.of(), taskExecutor).thenCompose(keep -> {
 			if (keep) {
 				return preparationBarrier.wait(Unit.INSTANCE).thenAcceptAsync(unused -> {
 				}, reloadExecutor);
@@ -57,7 +57,7 @@ public abstract class FontManagerMixin {
 
 			this.rpo$pending = InputRecording.start(manager);
 			this.rpo$runVanilla = true;
-			return self.reload(currentReload, taskExecutor, preparationBarrier, reloadExecutor);
+			return self.reload(preparationBarrier, manager, taskExecutor, reloadExecutor);
 		}));
 	}
 
@@ -65,13 +65,14 @@ public abstract class FontManagerMixin {
 		method = "reload",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet/minecraft/server/packs/resources/PreparableReloadListener$SharedState;resourceManager()Lnet/minecraft/server/packs/resources/ResourceManager;"
+			target = "Lnet/minecraft/client/gui/font/FontManager;prepare(Lnet/minecraft/server/packs/resources/ResourceManager;Ljava/util/concurrent/Executor;)Ljava/util/concurrent/CompletableFuture;"
 		)
 	)
-	private ResourceManager rpo$recordReads(final PreparableReloadListener.SharedState currentReload, final Operation<ResourceManager> original) {
-		ResourceManager manager = original.call(currentReload);
+	private CompletableFuture<?> rpo$recordReads(
+		final FontManager self, final ResourceManager manager, final Executor executor, final Operation<CompletableFuture<?>> original
+	) {
 		InputRecording pending = this.rpo$pending;
-		return pending != null ? pending.manager() : manager;
+		return original.call(self, pending != null ? pending.manager() : manager, executor);
 	}
 
 	@Inject(method = "apply", at = @At("HEAD"))

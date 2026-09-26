@@ -2,8 +2,7 @@ package dev.ravineclaw.rpo;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import dev.ravineclaw.rpo.mixin.SpriteContentsAccessor;
-import dev.ravineclaw.rpo.mixin.TextureAtlasSpriteAccessor;
-import java.nio.ByteBuffer;
+import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -12,25 +11,25 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import net.minecraft.client.renderer.texture.SpriteContents;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import org.jspecify.annotations.Nullable;
 import org.lwjgl.system.MemoryUtil;
 
 public final class AtlasBuilder {
 	private static final long MAX_ATLAS_PIXELS = 8192L * 4096L;
 	private static final int TILE_SIZE = 256;
-	private static final Map<Identifier, Built> PENDING = new HashMap<>();
+	private static final Map<ResourceLocation, Built> PENDING = new HashMap<>();
 
 	private AtlasBuilder() {
 	}
 
-	public record Tile(int x, int y, int width, int height, ByteBuffer pixels) {
+	public record Tile(int x, int y, int width, int height, IntBuffer pixels) {
 	}
 
 	public record Level(int width, int height, List<Tile> tiles) {
 	}
 
-	public record Built(Map<Identifier, TextureAtlasSprite> regions, Level[] levels) {
+	public record Built(Map<ResourceLocation, TextureAtlasSprite> regions, Level[] levels) {
 		public void close() {
 			for (Level level : this.levels) {
 				if (level != null) {
@@ -44,8 +43,8 @@ public final class AtlasBuilder {
 
 	public static CompletableFuture<Void> buildAfter(
 		final CompletableFuture<Void> mipmapsReady,
-		final Identifier atlas,
-		final Map<Identifier, TextureAtlasSprite> regions,
+		final ResourceLocation atlas,
+		final Map<ResourceLocation, TextureAtlasSprite> regions,
 		final int width,
 		final int height,
 		final int mipLevel,
@@ -103,7 +102,7 @@ public final class AtlasBuilder {
 		}, executor);
 	}
 
-	public static @Nullable Built take(final Identifier atlas, final Map<Identifier, TextureAtlasSprite> regions) {
+	public static @Nullable Built take(final ResourceLocation atlas, final Map<ResourceLocation, TextureAtlasSprite> regions) {
 		synchronized (PENDING) {
 			Built built = PENDING.remove(atlas);
 			if (built == null) {
@@ -119,8 +118,7 @@ public final class AtlasBuilder {
 		}
 	}
 
-	private static @Nullable List<TextureAtlasSprite> staticSprites(final Map<Identifier, TextureAtlasSprite> regions, final int mipLevel) {
-		int alignment = 1 << mipLevel;
+	private static @Nullable List<TextureAtlasSprite> staticSprites(final Map<ResourceLocation, TextureAtlasSprite> regions, final int mipLevel) {
 		List<TextureAtlasSprite> result = new ArrayList<>(regions.size());
 		for (TextureAtlasSprite sprite : regions.values()) {
 			if (sprite.isAnimated()) {
@@ -128,15 +126,8 @@ public final class AtlasBuilder {
 			}
 
 			SpriteContents contents = sprite.contents();
-			int padding = ((TextureAtlasSpriteAccessor)sprite).rpo$getPadding();
 			NativeImage[] mips = ((SpriteContentsAccessor)contents).rpo$getByMipLevel();
-			if (contents.width() % alignment != 0
-				|| contents.height() % alignment != 0
-				|| padding % alignment != 0
-				|| sprite.getX() % alignment != 0
-				|| sprite.getY() % alignment != 0
-				|| mips == null
-				|| mips.length <= mipLevel) {
+			if (mips == null || mips.length != mipLevel + 1 || sprite.getX() < 0 || sprite.getY() < 0) {
 				return null;
 			}
 
@@ -144,8 +135,8 @@ public final class AtlasBuilder {
 				NativeImage image = mips[level];
 				if (image == null
 					|| image.format() != NativeImage.Format.RGBA
-					|| image.getWidth() != contents.width() >> level
-					|| image.getHeight() != contents.height() >> level) {
+					|| image.getWidth() < contents.width() >> level
+					|| image.getHeight() < contents.height() >> level) {
 					return null;
 				}
 			}
@@ -170,41 +161,27 @@ public final class AtlasBuilder {
 			for (TextureAtlasSprite sprite : sprites) {
 				SpriteContents contents = sprite.contents();
 				NativeImage source = ((SpriteContentsAccessor)contents).rpo$getByMipLevel()[level];
-				int sourceWidth = contents.width() >> level;
-				int sourceHeight = contents.height() >> level;
-				if (sourceWidth <= 0 || sourceHeight <= 0) {
+				int width = contents.width() >> level;
+				int height = contents.height() >> level;
+				if (width <= 0 || height <= 0) {
 					continue;
 				}
 
-				int pad = ((TextureAtlasSpriteAccessor)sprite).rpo$getPadding() >> level;
 				int originX = sprite.getX() >> level;
 				int originY = sprite.getY() >> level;
-				int slotWidth = sourceWidth + pad * 2;
-				int slotHeight = sourceHeight + pad * 2;
-				if (originX < 0 || originY < 0 || originX + slotWidth > levelWidth || originY + slotHeight > levelHeight) {
+				if (originX + width > levelWidth || originY + height > levelHeight) {
 					return null;
 				}
 
 				long sourceBase = source.getPointer();
-				long sourceStride = (long)sourceWidth * 4L;
-				for (int dy = 0; dy < slotHeight; dy++) {
-					int sy = Math.clamp(dy - pad, 0, sourceHeight - 1);
-					long sourceRow = sourceBase + sy * sourceStride;
-					long targetRow = targetBase + (originY + dy) * targetStride + (long)originX * 4L;
-					if (pad > 0) {
-						int left = MemoryUtil.memGetInt(sourceRow);
-						int right = MemoryUtil.memGetInt(sourceRow + sourceStride - 4L);
-						for (int dx = 0; dx < pad; dx++) {
-							MemoryUtil.memPutInt(targetRow + dx * 4L, left);
-							MemoryUtil.memPutInt(targetRow + (pad + sourceWidth + dx) * 4L, right);
-						}
-					}
-
-					MemoryUtil.memCopy(sourceRow, targetRow + pad * 4L, sourceStride);
+				long sourceStride = (long)source.getWidth() * 4L;
+				long rowBytes = (long)width * 4L;
+				for (int dy = 0; dy < height; dy++) {
+					MemoryUtil.memCopy(sourceBase + dy * sourceStride, targetBase + (originY + dy) * targetStride + (long)originX * 4L, rowBytes);
 				}
 
-				for (int ty = originY / TILE_SIZE; ty <= (originY + slotHeight - 1) / TILE_SIZE; ty++) {
-					for (int tx = originX / TILE_SIZE; tx <= (originX + slotWidth - 1) / TILE_SIZE; tx++) {
+				for (int ty = originY / TILE_SIZE; ty <= (originY + height - 1) / TILE_SIZE; ty++) {
+					for (int tx = originX / TILE_SIZE; tx <= (originX + width - 1) / TILE_SIZE; tx++) {
 						used[ty * tilesX + tx] = true;
 					}
 				}
@@ -222,7 +199,7 @@ public final class AtlasBuilder {
 					int width = Math.min(TILE_SIZE, levelWidth - x);
 					int height = Math.min(TILE_SIZE, levelHeight - y);
 					long rowBytes = (long)width * 4L;
-					ByteBuffer pixels = MemoryUtil.memAlloc((int)(rowBytes * height));
+					IntBuffer pixels = MemoryUtil.memAllocInt(width * height);
 					long pixelsBase = MemoryUtil.memAddress(pixels);
 					for (int row = 0; row < height; row++) {
 						MemoryUtil.memCopy(targetBase + (y + row) * targetStride + (long)x * 4L, pixelsBase + row * rowBytes, rowBytes);

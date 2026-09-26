@@ -14,7 +14,7 @@ public final class ReuseGuard {
 		"net.minecraft.client.renderer.texture.TextureAtlas",
 		"net.minecraft.client.renderer.texture.SpriteContents",
 		"net.minecraft.client.renderer.texture.Stitcher",
-		"net.minecraft.client.resources.model.sprite.AtlasManager",
+		"net.minecraft.client.resources.model.AtlasSet",
 		"net.minecraft.client.renderer.texture.atlas.SpriteSourceList",
 		"net.minecraft.client.renderer.texture.atlas.SpriteSources",
 		"net.minecraft.client.renderer.texture.atlas.SpriteResourceLoader"
@@ -36,7 +36,7 @@ public final class ReuseGuard {
 		"net.minecraft.client.renderer.texture.TextureContents"
 	};
 	public static final String[] CHUNKS = {
-		"net.minecraft.client.renderer.extract.LevelExtractor"
+		"net.minecraft.client.renderer.LevelRenderer"
 	};
 
 	private ReuseGuard() {

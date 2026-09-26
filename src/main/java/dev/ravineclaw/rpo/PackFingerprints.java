@@ -26,7 +26,7 @@ import java.util.zip.CRC32C;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.CompositePackResources;
 import net.minecraft.server.packs.FilePackResources;
 import net.minecraft.server.packs.PackResources;
@@ -48,7 +48,7 @@ public final class PackFingerprints {
 	private PackFingerprints() {
 	}
 
-	public static void append(final PackResources pack, final PackType type, final Identifier id, final LongArrayList out) {
+	public static void append(final PackResources pack, final PackType type, final ResourceLocation id, final LongArrayList out) {
 		source(pack).append(type, id, id.getNamespace() + "/" + id.getPath(), out);
 	}
 
@@ -107,12 +107,12 @@ public final class PackFingerprints {
 
 	@FunctionalInterface
 	private interface Source {
-		void append(PackType type, Identifier id, String path, LongArrayList out);
+		void append(PackType type, ResourceLocation id, String path, LongArrayList out);
 	}
 
 	private record ImmutableSource(WeakReference<PackResources> pack, long present) implements Source {
 		@Override
-		public void append(final PackType type, final Identifier id, final String path, final LongArrayList out) {
+		public void append(final PackType type, final ResourceLocation id, final String path, final LongArrayList out) {
 			PackResources pack = this.pack.get();
 			out.add(pack == null ? UNKNOWN : pack.getResource(type, id) != null ? this.present : ABSENT);
 		}
@@ -153,7 +153,7 @@ public final class PackFingerprints {
 		}
 
 		@Override
-		public void append(final PackType type, final Identifier id, final String path, final LongArrayList out) {
+		public void append(final PackType type, final ResourceLocation id, final String path, final LongArrayList out) {
 			ZipFile zipFile;
 			try {
 				zipFile = (ZipFile)getOrCreate.invoke(this.access);
@@ -189,7 +189,7 @@ public final class PackFingerprints {
 		}
 
 		@Override
-		public void append(final PackType type, final Identifier id, final String path, final LongArrayList out) {
+		public void append(final PackType type, final ResourceLocation id, final String path, final LongArrayList out) {
 			Map<String, List<Path>> index = this.indexes.computeIfAbsent(type, this::walk);
 			if (index == FAILED_INDEX) {
 				out.add(UNKNOWN);

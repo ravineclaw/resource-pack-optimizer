@@ -6,9 +6,13 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.gui.screens.worldselection.SelectWorldScreen;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.server.packs.repository.PackRepository;
+import net.minecraft.world.Difficulty;
+import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.LevelSettings;
 import net.minecraft.world.level.WorldDataConfiguration;
@@ -41,7 +45,7 @@ public final class SelfTest {
 		try {
 			long start = System.nanoTime();
 			Minecraft minecraft = waitFor(Minecraft::getInstance);
-			waitUntil(minecraft, () -> minecraft.gui.overlay() == null && minecraft.gui.screen() instanceof TitleScreen);
+			waitUntil(minecraft, () -> minecraft.getOverlay() == null && minecraft.screen instanceof TitleScreen);
 			log("startup until title screen: {} ms", (System.nanoTime() - start) / 1_000_000L);
 
 			if (!Boolean.getBoolean("rpo.disable")) {
@@ -63,7 +67,7 @@ public final class SelfTest {
 			log("dumped atlases to {}", dumpDir);
 
 			if (minecraft.level != null) {
-				CompletableFuture.runAsync(minecraft::disconnectWithSavingScreen, minecraft).join();
+				CompletableFuture.runAsync(() -> PauseScreen.disconnectFromWorld(minecraft, ClientLevel.DEFAULT_QUIT_MESSAGE), minecraft).join();
 				waitUntil(minecraft, () -> minecraft.level == null);
 			}
 
@@ -82,14 +86,22 @@ public final class SelfTest {
 		long start = System.nanoTime();
 		CompletableFuture.runAsync(() -> {
 			if (minecraft.getLevelSource().levelExists(WORLD)) {
-				minecraft.createWorldOpenFlows().openWorld(WORLD, () -> minecraft.gui.setScreen(new TitleScreen()));
+				minecraft.createWorldOpenFlows().openWorld(WORLD, () -> minecraft.setScreen(new TitleScreen()));
 			} else {
-				LevelSettings settings = new LevelSettings(WORLD, GameType.SPECTATOR, LevelSettings.DifficultySettings.DEFAULT, true, WorldDataConfiguration.DEFAULT);
+				LevelSettings settings = new LevelSettings(
+					WORLD,
+					GameType.SPECTATOR,
+					false,
+					Difficulty.NORMAL,
+					true,
+					new GameRules(WorldDataConfiguration.DEFAULT.enabledFeatures()),
+					WorldDataConfiguration.DEFAULT
+				);
 				minecraft.createWorldOpenFlows()
 					.createFreshLevel(WORLD, settings, SelectWorldScreen.TEST_OPTIONS, WorldPresets::createNormalWorldDimensions, new TitleScreen());
 			}
 		}, minecraft).join();
-		waitUntil(minecraft, () -> minecraft.level != null && minecraft.player != null && minecraft.gui.screen() == null && minecraft.gui.overlay() == null);
+		waitUntil(minecraft, () -> minecraft.level != null && minecraft.player != null && minecraft.screen == null && minecraft.getOverlay() == null);
 		waitForChunks(minecraft, 180_000L);
 		log("world open with all chunks built: {} ms ({} sections)", (System.nanoTime() - start) / 1_000_000L, sections(minecraft));
 
@@ -135,7 +147,7 @@ public final class SelfTest {
 	private static void reload(final Minecraft minecraft, final String label, final boolean waitForChunks) throws InterruptedException {
 		long start = System.nanoTime();
 		CompletableFuture.runAsync(minecraft::reloadResourcePacks, minecraft).join();
-		waitUntil(minecraft, () -> minecraft.gui.overlay() == null);
+		waitUntil(minecraft, () -> minecraft.getOverlay() == null);
 		long overlay = (System.nanoTime() - start) / 1_000_000L;
 		ReloadTimeline.log(label);
 		if (!waitForChunks) {
@@ -152,7 +164,7 @@ public final class SelfTest {
 		int quietChecks = 0;
 		while (quietChecks < 5 && System.currentTimeMillis() < deadline) {
 			boolean done = CompletableFuture.supplyAsync(
-				() -> minecraft.levelExtractor.countRenderedSections() > 0 && minecraft.levelRenderer.hasRenderedAllSections(), minecraft
+				() -> minecraft.levelRenderer.countRenderedSections() > 0 && minecraft.levelRenderer.hasRenderedAllSections(), minecraft
 			).join();
 			quietChecks = done ? quietChecks + 1 : 0;
 			Thread.sleep(done ? 2L : 5L);
@@ -160,7 +172,7 @@ public final class SelfTest {
 	}
 
 	private static int sections(final Minecraft minecraft) {
-		return CompletableFuture.supplyAsync(minecraft.levelExtractor::countRenderedSections, minecraft).join();
+		return CompletableFuture.supplyAsync(minecraft.levelRenderer::countRenderedSections, minecraft).join();
 	}
 
 	private static void log(final String message, final Object... args) {

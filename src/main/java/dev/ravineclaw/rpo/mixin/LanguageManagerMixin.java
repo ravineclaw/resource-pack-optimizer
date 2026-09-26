@@ -43,12 +43,11 @@ public abstract class LanguageManagerMixin implements PreparableReloadListener {
 
 	@Override
 	public CompletableFuture<Void> reload(
-		final PreparableReloadListener.SharedState currentReload,
-		final Executor taskExecutor,
 		final PreparableReloadListener.PreparationBarrier preparationBarrier,
+		final ResourceManager manager,
+		final Executor taskExecutor,
 		final Executor reloadExecutor
 	) {
-		ResourceManager manager = currentReload.resourceManager();
 		String code = this.currentCode;
 		return CompletableFuture.supplyAsync(() -> rpo$prepare(manager, code), taskExecutor)
 			.thenCompose(preparationBarrier::wait)
@@ -59,6 +58,7 @@ public abstract class LanguageManagerMixin implements PreparableReloadListener {
 				}
 
 				this.languages = prepared.languages();
+				I18nInvoker.rpo$setLanguage(prepared.language());
 				Language.inject(prepared.language());
 				this.reloadCallback.accept(prepared.language());
 			}, reloadExecutor);
