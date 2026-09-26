@@ -12,6 +12,7 @@ import net.minecraft.server.packs.resources.SimpleReloadInstance;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(SimpleReloadInstance.class)
@@ -54,5 +55,17 @@ public abstract class SimpleReloadInstanceMixin {
 		}
 
 		return original.call(steps, step);
+	}
+
+	@ModifyArg(
+		method = "prepareTasks",
+		at = @At(
+			value = "INVOKE",
+			target = "Lnet/minecraft/server/packs/resources/SimpleReloadInstance$StateFactory;create(Lnet/minecraft/server/packs/resources/PreparableReloadListener$SharedState;Lnet/minecraft/server/packs/resources/PreparableReloadListener$PreparationBarrier;Lnet/minecraft/server/packs/resources/PreparableReloadListener;Ljava/util/concurrent/Executor;Ljava/util/concurrent/Executor;)Ljava/util/concurrent/CompletableFuture;"
+		),
+		index = 4
+	)
+	private Executor rpo$timeMainThread(final Executor reloadExecutor, @Local(name = "listener") final PreparableReloadListener listener) {
+		return ReloadTimeline.ENABLED ? ReloadTimeline.timedMainThread(listener, reloadExecutor) : reloadExecutor;
 	}
 }
