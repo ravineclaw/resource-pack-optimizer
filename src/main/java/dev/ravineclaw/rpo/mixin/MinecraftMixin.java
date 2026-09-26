@@ -4,12 +4,15 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
 import dev.ravineclaw.rpo.BackgroundReload;
+import dev.ravineclaw.rpo.ReloadTimeline;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.LoadingOverlay;
 import net.minecraft.client.gui.screens.Overlay;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Constant;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(Minecraft.class)
 public abstract class MinecraftMixin {
@@ -32,5 +35,12 @@ public abstract class MinecraftMixin {
 	)
 	private boolean rpo$backgroundReloadCounts(final Object overlay, final Operation<Boolean> original) {
 		return original.call(overlay) || BackgroundReload.current() != null;
+	}
+
+	@Inject(method = "runTick", at = @At("HEAD"))
+	private void rpo$countFrame(final boolean advanceGameTime, final CallbackInfo ci) {
+		if (ReloadTimeline.ENABLED) {
+			ReloadTimeline.frame();
+		}
 	}
 }
