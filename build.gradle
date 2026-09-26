@@ -19,6 +19,9 @@ loom {
 					vmArg "-Drpo.selftest.world=true"
 				}
 			}
+			if (project.hasProperty("rpoJfr")) {
+				vmArg "-XX:StartFlightRecording=filename=${project.findProperty('rpoJfr')},settings=profile"
+			}
 			if (project.hasProperty("rpoDisable")) {
 				vmArg "-Drpo.disable=true"
 			}
