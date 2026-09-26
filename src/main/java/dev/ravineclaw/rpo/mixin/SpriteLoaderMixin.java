@@ -17,7 +17,7 @@ import java.util.concurrent.Executor;
 import net.minecraft.client.renderer.texture.SpriteLoader;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.packs.metadata.MetadataSectionType;
+import net.minecraft.server.packs.metadata.MetadataSectionSerializer;
 import net.minecraft.server.packs.resources.ResourceManager;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -57,7 +57,7 @@ public abstract class SpriteLoaderMixin {
 		final ResourceLocation atlasInfoLocation,
 		final int maxMipmapLevels,
 		final Executor taskExecutor,
-		final Collection<MetadataSectionType<?>> additionalMetadata,
+		final Collection<MetadataSectionSerializer<?>> additionalMetadata,
 		final CallbackInfoReturnable<CompletableFuture<SpriteLoader.Preparations>> cir
 	) {
 		if (RPO_BYPASS.get() || !InputRecording.isTrackable(manager) || !ReuseGuard.untouched("atlases", ReuseGuard.ATLASES)) {

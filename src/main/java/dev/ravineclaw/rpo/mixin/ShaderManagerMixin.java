@@ -11,6 +11,7 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(ShaderManager.class)
 public abstract class ShaderManagerMixin implements ShaderCacheOwner {
@@ -53,8 +54,8 @@ public abstract class ShaderManagerMixin implements ShaderCacheOwner {
 		this.rpo$currentCache = this.rpo$createdCache;
 	}
 
-	@Inject(method = "tryTriggerRecovery", at = @At("HEAD"))
-	private void rpo$forgetOnRecovery(final CallbackInfo ci) {
+	@Inject(method = {"getProgram", "getPostChain"}, at = @At(value = "INVOKE", target = "Ljava/util/function/Consumer;accept(Ljava/lang/Object;)V"))
+	private void rpo$forgetOnRecovery(final CallbackInfoReturnable<?> ci) {
 		this.rpo$lastConfigs = null;
 		this.rpo$currentCache = null;
 	}

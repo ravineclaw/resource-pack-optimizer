@@ -5,11 +5,11 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.client.renderer.texture.SpriteLoader;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.packs.metadata.MetadataSectionType;
+import net.minecraft.server.packs.metadata.MetadataSectionSerializer;
 import org.jetbrains.annotations.Nullable;
 
 public final class AtlasReuse {
-	public record Key(ResourceLocation definition, int maxMipmapLevels, int maxTextureSize, Set<MetadataSectionType<?>> metadata) {
+	public record Key(ResourceLocation definition, int maxMipmapLevels, int maxTextureSize, Set<MetadataSectionSerializer<?>> metadata) {
 	}
 
 	public record Entry(Key key, InputRecording recording, SpriteLoader.Preparations preparations) {

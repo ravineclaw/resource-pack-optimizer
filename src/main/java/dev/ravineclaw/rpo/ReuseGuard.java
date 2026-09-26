@@ -4,20 +4,18 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.client.gui.font.FontManager;
 import net.minecraft.client.renderer.LevelRenderer;
-import net.minecraft.client.renderer.texture.ReloadableTexture;
+import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.client.renderer.texture.SimpleTexture;
 import net.minecraft.client.renderer.texture.SpriteContents;
 import net.minecraft.client.renderer.texture.SpriteLoader;
 import net.minecraft.client.renderer.texture.Stitcher;
 import net.minecraft.client.renderer.texture.TextureAtlas;
-import net.minecraft.client.renderer.texture.TextureContents;
 import net.minecraft.client.renderer.texture.TextureManager;
 import net.minecraft.client.renderer.texture.atlas.SpriteResourceLoader;
 import net.minecraft.client.renderer.texture.atlas.SpriteSourceList;
 import net.minecraft.client.renderer.texture.atlas.SpriteSources;
 import net.minecraft.client.resources.model.AtlasSet;
 import net.minecraft.client.resources.model.BlockStateModelLoader;
-import net.minecraft.client.resources.model.ClientItemInfoLoader;
 import net.minecraft.client.resources.model.ModelBakery;
 import net.minecraft.client.resources.model.ModelDiscovery;
 import net.minecraft.client.resources.model.ModelManager;
@@ -42,17 +40,15 @@ public final class ReuseGuard {
 		ModelManager.class,
 		ModelBakery.class,
 		ModelDiscovery.class,
-		BlockStateModelLoader.class,
-		ClientItemInfoLoader.class
+		BlockStateModelLoader.class
 	};
 	public static final Class<?>[] FONTS = {
 		FontManager.class
 	};
 	public static final Class<?>[] TEXTURES = {
 		TextureManager.class,
-		ReloadableTexture.class,
-		SimpleTexture.class,
-		TextureContents.class
+		AbstractTexture.class,
+		SimpleTexture.class
 	};
 	public static final Class<?>[] CHUNKS = {
 		LevelRenderer.class

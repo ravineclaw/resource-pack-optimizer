@@ -97,6 +97,9 @@ public abstract class TextureAtlasMixin {
 					}
 				}
 
+				GlStateManager._texParameter(3553, 10241, levels.length > 1 ? 9986 : 9728);
+				GlStateManager._texParameter(3553, 10240, 9728);
+
 				this.rpo$tilesWritten = true;
 			} catch (RuntimeException e) {
 				ResourcePackOptimizer.LOGGER.warn("Fast upload of atlas {} failed, falling back to vanilla", this.location, e);

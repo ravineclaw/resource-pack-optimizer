@@ -19,8 +19,6 @@ public abstract class CompilationCacheMixin implements PostChainReset {
 	@Shadow
 	@Final
 	Map<ResourceLocation, Optional<PostChain>> postChains;
-	@Shadow
-	boolean triggeredRecovery;
 
 	@Inject(method = "<init>", at = @At("RETURN"))
 	private void rpo$register(final ShaderManager owner, final ShaderManager.Configs configs, final CallbackInfo ci) {
@@ -30,6 +28,5 @@ public abstract class CompilationCacheMixin implements PostChainReset {
 	@Override
 	public void rpo$reset() {
 		this.postChains.clear();
-		this.triggeredRecovery = false;
 	}
 }

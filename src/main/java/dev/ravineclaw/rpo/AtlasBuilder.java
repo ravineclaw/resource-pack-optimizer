@@ -130,7 +130,7 @@ public final class AtlasBuilder {
 		List<TextureAtlasSprite> result = new ArrayList<>(regions.size());
 		for (TextureAtlasSprite sprite : regions.values()) {
 			SpriteContents contents = sprite.contents();
-			if (contents.metadata().getSection(AnimationMetadataSection.TYPE).isPresent()) {
+			if (contents.metadata().getSection(AnimationMetadataSection.SERIALIZER).isPresent()) {
 				continue;
 			}
 
