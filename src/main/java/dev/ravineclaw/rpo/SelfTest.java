@@ -1,5 +1,7 @@
 package dev.ravineclaw.rpo;
 
+import com.mojang.blaze3d.platform.NativeImage;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -78,7 +80,7 @@ public final class SelfTest {
 		}
 	}
 
-	private static void inWorld(final Minecraft minecraft) throws InterruptedException {
+	private static void inWorld(final Minecraft minecraft) throws Exception {
 		long start = System.nanoTime();
 		CompletableFuture.runAsync(() -> {
 			if (minecraft.getLevelSource().levelExists(WORLD)) {
@@ -99,6 +101,7 @@ public final class SelfTest {
 
 		togglePack(minecraft, SOUND_PACK);
 		togglePack(minecraft, TEXTURE_PACK);
+		folderProbe(minecraft);
 
 		int mipmaps = minecraft.options.mipmapLevels().get();
 		setMipmaps(minecraft, mipmaps == 4 ? 2 : 4);
@@ -125,6 +128,42 @@ public final class SelfTest {
 		reload(minecraft, "world with " + packId, true);
 	}
 
+	private static void folderProbe(final Minecraft minecraft) throws Exception {
+		List<String> selected = CompletableFuture.supplyAsync(() -> new ArrayList<>(minecraft.getResourcePackRepository().getSelectedIds()), minecraft).join();
+		Path folder = null;
+		for (String id : selected) {
+			Path candidate = minecraft.getResourcePackDirectory().resolve(id.substring(id.indexOf('/') + 1));
+			if (id.startsWith("file/") && Files.isDirectory(candidate)) {
+				folder = candidate;
+				break;
+			}
+		}
+
+		if (folder == null) {
+			log("no folder pack selected, skipping folder probe");
+			return;
+		}
+
+		Path probe = folder.resolve("assets/minecraft/textures/block/rpo_selftest_probe.png");
+		Files.createDirectories(probe.getParent());
+		try (NativeImage image = new NativeImage(16, 16, false)) {
+			image.fillRect(0, 0, 16, 16, 0xFF00FF00);
+			image.writeToFile(probe);
+		}
+
+		try {
+			reload(minecraft, "world folder probe added", true);
+			log("folder probe added: block atlas rebuilt = {} (expected true)", !ReloadChanges.isUnchanged(ReloadChanges.BLOCK_ATLAS));
+		} finally {
+			Files.deleteIfExists(probe);
+		}
+
+		reload(minecraft, "world folder probe removed", true);
+		log("folder probe removed: block atlas rebuilt = {} (expected true)", !ReloadChanges.isUnchanged(ReloadChanges.BLOCK_ATLAS));
+		reload(minecraft, "world folder probe unchanged", true);
+		log("folder probe unchanged: block atlas rebuilt = {} (expected false)", !ReloadChanges.isUnchanged(ReloadChanges.BLOCK_ATLAS));
+	}
+
 	private static void setMipmaps(final Minecraft minecraft, final int levels) {
 		CompletableFuture.runAsync(() -> {
 			minecraft.options.mipmapLevels().set(levels);
@@ -133,6 +172,7 @@ public final class SelfTest {
 	}
 
 	private static void reload(final Minecraft minecraft, final String label, final boolean waitForChunks) throws InterruptedException {
+		CompletableFuture.runAsync(ReloadTimeline::resetFrames, minecraft).join();
 		long start = System.nanoTime();
 		boolean blocking = CompletableFuture.supplyAsync(() -> {
 			minecraft.reloadResourcePacks();
@@ -144,14 +184,15 @@ public final class SelfTest {
 
 		waitUntil(minecraft, () -> minecraft.gui.overlay() == null && BackgroundReload.current() == null);
 		long overlay = (System.nanoTime() - start) / 1_000_000L;
+		long frame = ReloadTimeline.longestFrameMillis();
 		ReloadTimeline.log(label);
 		if (!waitForChunks) {
-			log("{}: until overlay gone {} ms", label, overlay);
+			log("{}: until overlay gone {} ms, longest frame {} ms", label, overlay, frame);
 			return;
 		}
 
 		waitForChunks(minecraft, 60_000L);
-		log("{}: until overlay gone {} ms, until all chunks built {} ms", label, overlay, (System.nanoTime() - start) / 1_000_000L);
+		log("{}: until overlay gone {} ms, until all chunks built {} ms, longest frame {} ms", label, overlay, (System.nanoTime() - start) / 1_000_000L, frame);
 	}
 
 	private static void waitForChunks(final Minecraft minecraft, final long timeoutMillis) throws InterruptedException {

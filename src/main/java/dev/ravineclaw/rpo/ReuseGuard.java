@@ -33,6 +33,7 @@ public final class ReuseGuard {
 		"net.minecraft.client.renderer.texture.TextureManager",
 		"net.minecraft.client.renderer.texture.ReloadableTexture",
 		"net.minecraft.client.renderer.texture.SimpleTexture",
+		"net.minecraft.client.renderer.texture.CubeMapTexture",
 		"net.minecraft.client.renderer.texture.TextureContents"
 	};
 	public static final String[] CHUNKS = {

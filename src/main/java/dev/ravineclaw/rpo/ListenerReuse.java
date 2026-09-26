@@ -13,6 +13,16 @@ public final class ListenerReuse {
 	private ListenerReuse() {
 	}
 
+	public static CompletableFuture<Boolean> inputsMatch(
+		final @Nullable InputRecording previous, final PreparableReloadListener.SharedState currentReload, final Executor executor
+	) {
+		if (previous == null) {
+			return CompletableFuture.completedFuture(Boolean.FALSE);
+		}
+
+		return CompletableFuture.supplyAsync(() -> previous.matches(currentReload.resourceManager()), executor).exceptionally(t -> Boolean.FALSE);
+	}
+
 	public static CompletableFuture<Boolean> canKeep(
 		final @Nullable InputRecording previous, final PreparableReloadListener.SharedState currentReload, final Executor executor
 	) {
