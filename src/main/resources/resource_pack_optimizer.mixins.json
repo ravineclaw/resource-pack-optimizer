@@ -1,0 +1,40 @@
+{
+	"required": true,
+	"package": "dev.ravineclaw.rpo.mixin",
+	"compatibilityLevel": "JAVA_25",
+	"plugin": "dev.ravineclaw.rpo.mixin.RpoMixinPlugin",
+	"client": [
+		"ColorMapListenerMixin",
+		"FilePackResourcesMixin",
+		"FileResourcesSupplierAccessor",
+		"FixedPathPackResourcesMixin",
+		"FontManagerMixin",
+		"HttpUtilMixin",
+		"LanguageManagerMixin",
+		"LanguageSelectScreenMixin",
+		"LevelExtractorMixin",
+		"LoadingOverlayMixin",
+		"ModelManagerMixin",
+		"MultiPackResourceManagerMixin",
+		"OverlayedPackResourcesAccessor",
+		"PackMixin",
+		"PathPackResourcesAccessor",
+		"PathResourcesSupplierAccessor",
+		"PendingStitchResultsAccessor",
+		"PostChainCacheMixin",
+		"ReloadableResourceManagerMixin",
+		"ReloadableTextureMixin",
+		"ShaderManagerMixin",
+		"SimpleReloadInstanceMixin",
+		"SoundEngineMixin",
+		"SoundManagerMixin",
+		"SpriteContentsAccessor",
+		"SpriteLoaderMixin",
+		"TextureAtlasMixin",
+		"TextureAtlasSpriteAccessor",
+		"TextureManagerMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	}
+}

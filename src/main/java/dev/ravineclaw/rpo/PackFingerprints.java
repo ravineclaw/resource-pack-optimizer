@@ -1,0 +1,253 @@
+package dev.ravineclaw.rpo;
+
+import dev.ravineclaw.rpo.mixin.OverlayedPackResourcesAccessor;
+import dev.ravineclaw.rpo.mixin.PathPackResourcesAccessor;
+import it.unimi.dsi.fastutil.longs.LongArrayList;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UncheckedIOException;
+import java.lang.ref.WeakReference;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.nio.file.FileSystems;
+import java.nio.file.FileVisitOption;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.WeakHashMap;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Stream;
+import java.util.zip.CRC32C;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
+import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.packs.FilePackResources;
+import net.minecraft.server.packs.FixedPathPackResources;
+import net.minecraft.server.packs.OverlayedPackResources;
+import net.minecraft.server.packs.PackResources;
+import net.minecraft.server.packs.PackType;
+import net.minecraft.server.packs.PathPackResources;
+
+public final class PackFingerprints {
+	public static final long ABSENT = -1L;
+	public static final long UNKNOWN = Long.MIN_VALUE;
+	private static final long DIRECTORY = -2L;
+	private static final long IMMUTABLE_BASE = -16L;
+
+	private static final Map<PackResources, Source> SOURCES = Collections.synchronizedMap(new WeakHashMap<>());
+	private static final Map<String, Integer> IMMUTABLE_IDS = new ConcurrentHashMap<>();
+	private static final Source UNKNOWN_SOURCE = (type, id, path, out) -> out.add(UNKNOWN);
+	private static final Map<String, List<Path>> FAILED_INDEX = new HashMap<>();
+
+	private PackFingerprints() {
+	}
+
+	public static void append(final PackResources pack, final PackType type, final Identifier id, final LongArrayList out) {
+		source(pack).append(type, id, id.getNamespace() + "/" + id.getPath(), out);
+	}
+
+	private static Source source(final PackResources pack) {
+		Source source = SOURCES.get(pack);
+		if (source == null) {
+			source = create(pack);
+			SOURCES.put(pack, source);
+		}
+
+		return source;
+	}
+
+	private static Source create(final PackResources pack) {
+		try {
+			if (pack instanceof FilePackResources) {
+				return ZipSource.of(pack);
+			}
+
+			if (pack instanceof PathPackResources) {
+				Path root = ((PathPackResourcesAccessor)pack).rpo$getRoot();
+				return root.getFileSystem() == FileSystems.getDefault() ? new FolderSource(root) : immutable(pack);
+			}
+
+			if (pack instanceof FixedPathPackResources) {
+				return ((ImmutablePack)pack).rpo$isImmutable() ? immutable(pack) : UNKNOWN_SOURCE;
+			}
+
+			if (pack instanceof OverlayedPackResources) {
+				List<Source> layers = new ArrayList<>();
+				for (PackResources layer : ((OverlayedPackResourcesAccessor)pack).rpo$getPackResourcesStack()) {
+					layers.add(source(layer));
+				}
+
+				return (type, id, path, out) -> {
+					for (Source layer : layers) {
+						layer.append(type, id, path, out);
+					}
+				};
+			}
+
+			if (pack.getClass().getName().startsWith("net.fabricmc.fabric.impl.resource.") && !FabricLoader.getInstance().isDevelopmentEnvironment()) {
+				return immutable(pack);
+			}
+		} catch (RuntimeException e) {
+			ResourcePackOptimizer.LOGGER.debug("Can't fingerprint pack {}", pack.packId(), e);
+		}
+
+		return UNKNOWN_SOURCE;
+	}
+
+	private static Source immutable(final PackResources pack) {
+		int index = IMMUTABLE_IDS.computeIfAbsent(pack.getClass().getName() + "\n" + pack.packId(), key -> IMMUTABLE_IDS.size());
+		return new ImmutableSource(new WeakReference<>(pack), IMMUTABLE_BASE - index);
+	}
+
+	@FunctionalInterface
+	private interface Source {
+		void append(PackType type, Identifier id, String path, LongArrayList out);
+	}
+
+	private record ImmutableSource(WeakReference<PackResources> pack, long present) implements Source {
+		@Override
+		public void append(final PackType type, final Identifier id, final String path, final LongArrayList out) {
+			PackResources pack = this.pack.get();
+			out.add(pack == null ? UNKNOWN : pack.getResource(type, id) != null ? this.present : ABSENT);
+		}
+	}
+
+	private static long token(final long crc, final long size) {
+		if (crc < 0L || size < 0L || size > 0xFFFFFFFFL) {
+			return UNKNOWN;
+		}
+
+		return crc << 32 | size;
+	}
+
+	private record ZipSource(Object access, String prefix) implements Source {
+		private static volatile Field accessField;
+		private static volatile Field prefixField;
+		private static volatile Method getOrCreate;
+
+		static Source of(final PackResources pack) {
+			try {
+				if (getOrCreate == null) {
+					Field access = FilePackResources.class.getDeclaredField("zipFileAccess");
+					access.setAccessible(true);
+					Field prefix = FilePackResources.class.getDeclaredField("prefix");
+					prefix.setAccessible(true);
+					Method method = access.getType().getDeclaredMethod("getOrCreateZipFile");
+					method.setAccessible(true);
+					accessField = access;
+					prefixField = prefix;
+					getOrCreate = method;
+				}
+
+				return new ZipSource(accessField.get(pack), (String)prefixField.get(pack));
+			} catch (ReflectiveOperationException | RuntimeException e) {
+				ResourcePackOptimizer.LOGGER.debug("Can't read zip of pack {}", pack.packId(), e);
+				return UNKNOWN_SOURCE;
+			}
+		}
+
+		@Override
+		public void append(final PackType type, final Identifier id, final String path, final LongArrayList out) {
+			ZipFile zipFile;
+			try {
+				zipFile = (ZipFile)getOrCreate.invoke(this.access);
+			} catch (ReflectiveOperationException e) {
+				out.add(UNKNOWN);
+				return;
+			}
+
+			if (zipFile == null) {
+				out.add(ABSENT);
+				return;
+			}
+
+			String name = type.getDirectory() + "/" + path;
+			ZipEntry entry = zipFile.getEntry(this.prefix.isEmpty() ? name : this.prefix + "/" + name);
+			if (entry == null) {
+				out.add(ABSENT);
+			} else if (entry.isDirectory()) {
+				out.add(DIRECTORY);
+			} else {
+				out.add(token(entry.getCrc(), entry.getSize()));
+			}
+		}
+	}
+
+	private static final class FolderSource implements Source {
+		private final Path root;
+		private final Map<PackType, Map<String, List<Path>>> indexes = new ConcurrentHashMap<>();
+		private final Map<Path, Long> tokens = new ConcurrentHashMap<>();
+
+		private FolderSource(final Path root) {
+			this.root = root;
+		}
+
+		@Override
+		public void append(final PackType type, final Identifier id, final String path, final LongArrayList out) {
+			Map<String, List<Path>> index = this.indexes.computeIfAbsent(type, this::walk);
+			if (index == FAILED_INDEX) {
+				out.add(UNKNOWN);
+				return;
+			}
+
+			List<Path> files = index.get(path.toLowerCase(Locale.ROOT));
+			if (files == null) {
+				out.add(ABSENT);
+				return;
+			}
+
+			for (Path file : files) {
+				out.add(this.tokens.computeIfAbsent(file, FolderSource::hash));
+			}
+		}
+
+		private Map<String, List<Path>> walk(final PackType type) {
+			Path top = this.root.resolve(type.getDirectory());
+			Map<String, List<Path>> index = new HashMap<>();
+			if (!Files.isDirectory(top)) {
+				return index;
+			}
+
+			try (Stream<Path> files = Files.walk(top, FileVisitOption.FOLLOW_LINKS)) {
+				files.forEach(file -> {
+					if (!file.equals(top)) {
+						String key = top.relativize(file).toString().replace('\\', '/').toLowerCase(Locale.ROOT);
+						index.computeIfAbsent(key, k -> new ArrayList<>(1)).add(file);
+					}
+				});
+			} catch (IOException | UncheckedIOException | SecurityException e) {
+				ResourcePackOptimizer.LOGGER.debug("Couldn't index folder pack {}", this.root, e);
+				return FAILED_INDEX;
+			}
+
+			return index;
+		}
+
+		private static long hash(final Path file) {
+			if (Files.isDirectory(file)) {
+				return DIRECTORY;
+			}
+
+			try (InputStream in = Files.newInputStream(file)) {
+				CRC32C crc = new CRC32C();
+				byte[] buffer = new byte[16384];
+				long size = 0L;
+				int read;
+				while ((read = in.read(buffer)) > 0) {
+					crc.update(buffer, 0, read);
+					size += read;
+				}
+
+				return token(crc.getValue(), size);
+			} catch (IOException | SecurityException e) {
+				return UNKNOWN;
+			}
+		}
+	}
+}

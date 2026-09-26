@@ -1,0 +1,25 @@
+{
+	"schemaVersion": 1,
+	"id": "resource_pack_optimizer",
+	"version": "${version}",
+	"name": "Resource Pack Optimizer",
+	"description": "Makes resource pack reloads near-instant: removes the forced loading-screen delays, indexes pack zips, caches vanilla lookups and pack metadata, parallelizes mipmaps, builds atlases off-thread, keeps atlases, models, fonts, textures, shaders and chunks that did not change, and avoids needless full reloads.",
+	"authors": [
+		"ravineclaw"
+	],
+	"license": "MIT",
+	"environment": "client",
+	"entrypoints": {
+		"client": [
+			"dev.ravineclaw.rpo.ResourcePackOptimizer"
+		]
+	},
+	"mixins": [
+		"resource_pack_optimizer.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.19.5",
+		"minecraft": "~26.3",
+		"java": ">=25"
+	}
+}
