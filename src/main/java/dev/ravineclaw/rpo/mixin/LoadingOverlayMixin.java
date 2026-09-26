@@ -2,6 +2,7 @@ package dev.ravineclaw.rpo.mixin;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import dev.ravineclaw.rpo.BackgroundReload;
 import dev.ravineclaw.rpo.ReloadChanges;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -92,6 +93,10 @@ public abstract class LoadingOverlayMixin {
 		}
 
 		if (this.fadeOutStart > -1L) {
+			if (BackgroundReload.finish(this)) {
+				return;
+			}
+
 			this.minecraft.gui.setOverlay(null);
 			if (this.minecraft.gui.screen() != null) {
 				this.minecraft.gui.screen().extractRenderStateWithTooltipAndSubtitles(graphics, mouseX, mouseY, a);
@@ -100,10 +105,12 @@ public abstract class LoadingOverlayMixin {
 			return;
 		}
 
-		if (this.minecraft.gui.screen() != null) {
-			this.minecraft.gui.screen().extractRenderStateWithTooltipAndSubtitles(graphics, mouseX, mouseY, a);
-		} else {
-			this.minecraft.gui.hud.extractDeferredSubtitles();
+		if (!BackgroundReload.isCurrent(this)) {
+			if (this.minecraft.gui.screen() != null) {
+				this.minecraft.gui.screen().extractRenderStateWithTooltipAndSubtitles(graphics, mouseX, mouseY, a);
+			} else {
+				this.minecraft.gui.hud.extractDeferredSubtitles();
+			}
 		}
 
 		graphics.nextStratum();
