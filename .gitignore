@@ -33,7 +33,7 @@ bin/
 run/
 
 # decompiled Minecraft (Mojang's code) — local reference only, never publish
-minecraft-26.*/
+minecraft-*/
 *.log
 
 # java
