@@ -1,12 +1,11 @@
 package dev.ravineclaw.rpo;
 
-import dev.ravineclaw.rpo.mixin.PendingStitchResultsAccessor;
+import dev.ravineclaw.rpo.mixin.StitchResultAccessor;
 import java.util.Collection;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
-import net.minecraft.client.renderer.texture.SpriteLoader;
-import net.minecraft.client.resources.model.sprite.AtlasManager;
-import net.minecraft.server.packs.resources.PreparableReloadListener;
+import net.minecraft.client.resources.model.AtlasSet;
+import net.minecraft.server.packs.resources.ResourceManager;
 import org.jspecify.annotations.Nullable;
 
 public final class ListenerReuse {
@@ -14,21 +13,22 @@ public final class ListenerReuse {
 	}
 
 	public static CompletableFuture<Boolean> canKeep(
-		final @Nullable InputRecording previous, final PreparableReloadListener.SharedState currentReload, final Executor executor
+		final @Nullable InputRecording previous,
+		final ResourceManager manager,
+		final Executor executor,
+		final Collection<CompletableFuture<AtlasSet.StitchResult>> atlases
 	) {
 		if (previous == null) {
 			return CompletableFuture.completedFuture(Boolean.FALSE);
 		}
 
-		return CompletableFuture.supplyAsync(() -> previous.matches(currentReload.resourceManager()), executor).thenCompose(same -> {
+		return CompletableFuture.supplyAsync(() -> previous.matches(manager), executor).thenCompose(same -> {
 			if (!same) {
 				return CompletableFuture.completedFuture(Boolean.FALSE);
 			}
 
-			Collection<CompletableFuture<SpriteLoader.Preparations>> atlases =
-				((PendingStitchResultsAccessor)currentReload.get(AtlasManager.PENDING_STITCH)).rpo$getStitchFuturesById().values();
 			return CompletableFuture.allOf(atlases.toArray(CompletableFuture[]::new))
-				.thenApply(unused -> atlases.stream().allMatch(atlas -> AtlasReuse.isUploaded(atlas.join())));
+				.thenApply(unused -> atlases.stream().allMatch(atlas -> AtlasReuse.isUploaded(((StitchResultAccessor)atlas.join()).rpo$getPreparations())));
 		}).exceptionally(t -> Boolean.FALSE);
 	}
 }

@@ -14,7 +14,7 @@ public final class ReuseGuard {
 		"net.minecraft.client.renderer.texture.TextureAtlas",
 		"net.minecraft.client.renderer.texture.SpriteContents",
 		"net.minecraft.client.renderer.texture.Stitcher",
-		"net.minecraft.client.resources.model.sprite.AtlasManager",
+		"net.minecraft.client.resources.model.AtlasSet",
 		"net.minecraft.client.renderer.texture.atlas.SpriteSourceList",
 		"net.minecraft.client.renderer.texture.atlas.SpriteSources",
 		"net.minecraft.client.renderer.texture.atlas.SpriteResourceLoader"
@@ -22,21 +22,22 @@ public final class ReuseGuard {
 	public static final String[] MODELS = {
 		"net.minecraft.client.resources.model.ModelManager",
 		"net.minecraft.client.resources.model.ModelBakery",
-		"net.minecraft.client.resources.model.ModelDiscovery",
-		"net.minecraft.client.resources.model.BlockStateModelLoader",
-		"net.minecraft.client.resources.model.ClientItemInfoLoader"
+		"net.minecraft.client.resources.model.BlockStateModelLoader"
 	};
 	public static final String[] FONTS = {
 		"net.minecraft.client.gui.font.FontManager"
 	};
 	public static final String[] TEXTURES = {
 		"net.minecraft.client.renderer.texture.TextureManager",
-		"net.minecraft.client.renderer.texture.ReloadableTexture",
-		"net.minecraft.client.renderer.texture.SimpleTexture",
-		"net.minecraft.client.renderer.texture.TextureContents"
+		"net.minecraft.client.renderer.texture.AbstractTexture",
+		"net.minecraft.client.renderer.texture.SimpleTexture"
 	};
 	public static final String[] CHUNKS = {
-		"net.minecraft.client.renderer.extract.LevelExtractor"
+		"net.minecraft.client.renderer.LevelRenderer"
+	};
+	public static final String[] SHADERS = {
+		"net.minecraft.client.renderer.GameRenderer",
+		"net.minecraft.client.renderer.ShaderInstance"
 	};
 
 	private ReuseGuard() {

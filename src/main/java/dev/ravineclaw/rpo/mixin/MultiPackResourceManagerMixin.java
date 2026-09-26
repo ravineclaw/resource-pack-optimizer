@@ -2,7 +2,6 @@ package dev.ravineclaw.rpo.mixin;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
-import com.mojang.serialization.JsonOps;
 import dev.ravineclaw.rpo.PackStack;
 import java.util.ArrayList;
 import java.util.List;
@@ -46,11 +45,11 @@ public abstract class MultiPackResourceManagerMixin implements PackStack {
 		if (section == null) {
 			encoded = "";
 		} else {
-			encoded = ResourceFilterSection.TYPE.codec()
-				.encodeStart(JsonOps.INSTANCE, section)
-				.result()
-				.map(Object::toString)
-				.orElseGet(() -> "unencodable:" + System.identityHashCode(section) + ":" + System.nanoTime());
+			try {
+				encoded = ResourceFilterSection.TYPE.toJson(section).toString();
+			} catch (RuntimeException e) {
+				encoded = "unencodable:" + System.identityHashCode(section) + ":" + System.nanoTime();
+			}
 		}
 
 		this.rpo$filters.add(encoded);

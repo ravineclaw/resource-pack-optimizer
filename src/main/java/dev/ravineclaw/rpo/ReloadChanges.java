@@ -8,7 +8,7 @@ import net.minecraft.server.packs.resources.PreparableReloadListener;
 public final class ReloadChanges {
 	public static final String BLOCK_ATLAS = "atlas:minecraft:textures/atlas/blocks.png";
 	public static final String MODELS = "models";
-	private static final Set<String> MESH_INPUTS = Set.of(BLOCK_ATLAS, MODELS, "colormap:grass", "colormap:foliage", "colormap:dry_foliage");
+	private static final Set<String> MESH_INPUTS = Set.of(BLOCK_ATLAS, MODELS, "colormap:grass", "colormap:foliage");
 
 	private static final Set<String> UNCHANGED = ConcurrentHashMap.newKeySet();
 	private static volatile boolean onlyVanillaListeners;

@@ -15,6 +15,7 @@ import net.minecraft.locale.Language;
 import net.minecraft.server.packs.PackResources;
 import net.minecraft.server.packs.resources.PreparableReloadListener;
 import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.util.profiling.ProfilerFiller;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -43,12 +44,13 @@ public abstract class LanguageManagerMixin implements PreparableReloadListener {
 
 	@Override
 	public CompletableFuture<Void> reload(
-		final PreparableReloadListener.SharedState currentReload,
-		final Executor taskExecutor,
 		final PreparableReloadListener.PreparationBarrier preparationBarrier,
+		final ResourceManager manager,
+		final ProfilerFiller preparationsProfiler,
+		final ProfilerFiller reloadProfiler,
+		final Executor taskExecutor,
 		final Executor reloadExecutor
 	) {
-		ResourceManager manager = currentReload.resourceManager();
 		String code = this.currentCode;
 		return CompletableFuture.supplyAsync(() -> rpo$prepare(manager, code), taskExecutor)
 			.thenCompose(preparationBarrier::wait)
@@ -59,6 +61,7 @@ public abstract class LanguageManagerMixin implements PreparableReloadListener {
 				}
 
 				this.languages = prepared.languages();
+				I18nAccessor.rpo$setLanguage(prepared.language());
 				Language.inject(prepared.language());
 				this.reloadCallback.accept(prepared.language());
 			}, reloadExecutor);

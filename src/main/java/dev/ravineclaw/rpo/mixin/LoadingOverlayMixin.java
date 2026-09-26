@@ -6,13 +6,13 @@ import dev.ravineclaw.rpo.ReloadChanges;
 import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.IntSupplier;
+import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.LoadingOverlay;
 import net.minecraft.server.packs.resources.ReloadInstance;
-import net.minecraft.util.ARGB;
+import net.minecraft.util.FastColor;
 import net.minecraft.util.Mth;
-import net.minecraft.util.Util;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -33,6 +33,9 @@ public abstract class LoadingOverlayMixin {
 	private ReloadInstance reload;
 	@Shadow
 	@Final
+	private Consumer<Optional<Throwable>> onFinish;
+	@Shadow
+	@Final
 	private boolean fadeIn;
 	@Shadow
 	private float currentProgress;
@@ -41,32 +44,12 @@ public abstract class LoadingOverlayMixin {
 	@Shadow
 	private long fadeInStart;
 
-	@ModifyConstant(method = "extractRenderState", constant = @Constant(floatValue = 1000.0F))
+	@ModifyConstant(method = "render", constant = @Constant(floatValue = 1000.0F))
 	private float rpo$noFadeOut(final float original) {
 		return 1.0F;
 	}
 
-	@ModifyConstant(method = "extractRenderState", constant = @Constant(floatValue = 500.0F))
-	private float rpo$noFadeIn(final float original) {
-		return 1.0F;
-	}
-
-	@ModifyConstant(method = "isReadyToFadeOut", constant = @Constant(longValue = 1000L))
-	private long rpo$noMinimumDuration(final long original) {
-		return 0L;
-	}
-
-	@Shadow
-	public abstract void tick();
-
-	@Inject(method = "extractRenderState", at = @At("HEAD"))
-	private void rpo$finishPromptly(final GuiGraphicsExtractor graphics, final int mouseX, final int mouseY, final float a, final CallbackInfo ci) {
-		if (this.fadeOutStart == -1L && this.fadeInStart != -1L && this.reload.isDone()) {
-			this.tick();
-		}
-	}
-
-	@WrapOperation(method = "tick", at = @At(value = "INVOKE", target = "Ljava/util/function/Consumer;accept(Ljava/lang/Object;)V"))
+	@WrapOperation(method = "render", at = @At(value = "INVOKE", target = "Ljava/util/function/Consumer;accept(Ljava/lang/Object;)V"))
 	private void rpo$markFinish(final Consumer<Object> onFinish, final Object result, final Operation<Void> original) {
 		if (result instanceof Optional<?> optional && optional.isEmpty()) {
 			ReloadChanges.finishReload(() -> original.call(onFinish, result));
@@ -75,13 +58,13 @@ public abstract class LoadingOverlayMixin {
 		}
 	}
 
-	@Redirect(method = "extractRenderState", at = @At(value = "INVOKE", target = "Ljava/util/function/IntSupplier;getAsInt()I"))
+	@Redirect(method = "render", at = @At(value = "INVOKE", target = "Ljava/util/function/IntSupplier;getAsInt()I"))
 	private int rpo$blackBackground(final IntSupplier brandBackground) {
-		return ARGB.color(255, 0, 0, 0);
+		return FastColor.ARGB32.color(255, 0, 0, 0);
 	}
 
-	@Inject(method = "extractRenderState", at = @At("HEAD"), cancellable = true)
-	private void rpo$inGameReload(final GuiGraphicsExtractor graphics, final int mouseX, final int mouseY, final float a, final CallbackInfo ci) {
+	@Inject(method = "render", at = @At("HEAD"), cancellable = true)
+	private void rpo$inGameReload(final GuiGraphics graphics, final int mouseX, final int mouseY, final float partialTick, final CallbackInfo ci) {
 		if (!this.fadeIn) {
 			return;
 		}
@@ -92,24 +75,44 @@ public abstract class LoadingOverlayMixin {
 		}
 
 		if (this.fadeOutStart > -1L) {
-			this.minecraft.gui.setOverlay(null);
-			if (this.minecraft.gui.screen() != null) {
-				this.minecraft.gui.screen().extractRenderStateWithTooltipAndSubtitles(graphics, mouseX, mouseY, a);
+			if (this.minecraft.getOverlay() == (Object)this) {
+				this.minecraft.setOverlay(null);
+			}
+
+			if (this.minecraft.screen != null) {
+				this.minecraft.screen.render(graphics, mouseX, mouseY, partialTick);
 			}
 
 			return;
 		}
 
-		if (this.minecraft.gui.screen() != null) {
-			this.minecraft.gui.screen().extractRenderStateWithTooltipAndSubtitles(graphics, mouseX, mouseY, a);
-		} else {
-			this.minecraft.gui.hud.extractDeferredSubtitles();
+		if (this.minecraft.screen != null) {
+			this.minecraft.screen.render(graphics, mouseX, mouseY, partialTick);
 		}
 
-		graphics.nextStratum();
+		if (this.reload.isDone()) {
+			try {
+				this.reload.checkExceptions();
+				ReloadChanges.finishReload(() -> this.onFinish.accept(Optional.empty()));
+			} catch (Throwable t) {
+				this.onFinish.accept(Optional.of(t));
+			}
+
+			this.fadeOutStart = Util.getMillis();
+			if (this.minecraft.screen != null) {
+				this.minecraft.screen.init(this.minecraft, graphics.guiWidth(), graphics.guiHeight());
+			}
+
+			if (this.minecraft.getOverlay() == (Object)this) {
+				this.minecraft.setOverlay(null);
+			}
+
+			return;
+		}
+
 		this.currentProgress = Mth.clamp(Math.max(this.currentProgress, this.currentProgress * 0.8F + this.reload.getActualProgress() * 0.2F), 0.0F, 1.0F);
 		int width = graphics.guiWidth();
-		graphics.fill(0, 0, width, 2, ARGB.color(96, 0, 0, 0));
-		graphics.fill(0, 0, Mth.ceil(width * this.currentProgress), 2, ARGB.color(220, 255, 255, 255));
+		graphics.fill(0, 0, width, 2, FastColor.ARGB32.color(96, 0, 0, 0));
+		graphics.fill(0, 0, Mth.ceil(width * this.currentProgress), 2, FastColor.ARGB32.color(220, 255, 255, 255));
 	}
 }

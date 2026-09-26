@@ -1,16 +1,16 @@
 package dev.ravineclaw.rpo.mixin;
 
-import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
-import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import dev.ravineclaw.rpo.InputRecording;
 import dev.ravineclaw.rpo.ListenerReuse;
 import dev.ravineclaw.rpo.ReuseGuard;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import net.minecraft.client.gui.font.FontManager;
 import net.minecraft.server.packs.resources.PreparableReloadListener;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.util.Unit;
+import net.minecraft.util.profiling.ProfilerFiller;
 import org.jspecify.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -30,9 +30,11 @@ public abstract class FontManagerMixin {
 
 	@Inject(method = "reload", at = @At("HEAD"), cancellable = true)
 	private void rpo$keepUnchanged(
-		final PreparableReloadListener.SharedState currentReload,
-		final Executor taskExecutor,
 		final PreparableReloadListener.PreparationBarrier preparationBarrier,
+		final ResourceManager manager,
+		final ProfilerFiller preparationsProfiler,
+		final ProfilerFiller reloadProfiler,
+		final Executor taskExecutor,
 		final Executor reloadExecutor,
 		final CallbackInfoReturnable<CompletableFuture<Void>> cir
 	) {
@@ -41,7 +43,6 @@ public abstract class FontManagerMixin {
 			return;
 		}
 
-		ResourceManager manager = currentReload.resourceManager();
 		if (!InputRecording.isTrackable(manager) || !ReuseGuard.untouched("fonts", ReuseGuard.FONTS)) {
 			this.rpo$applied = null;
 			this.rpo$pending = null;
@@ -49,29 +50,17 @@ public abstract class FontManagerMixin {
 		}
 
 		FontManager self = (FontManager)(Object)this;
-		cir.setReturnValue(ListenerReuse.canKeep(this.rpo$applied, currentReload, taskExecutor).thenCompose(keep -> {
+		cir.setReturnValue(ListenerReuse.canKeep(this.rpo$applied, manager, taskExecutor, List.of()).thenCompose(keep -> {
 			if (keep) {
 				return preparationBarrier.wait(Unit.INSTANCE).thenAcceptAsync(unused -> {
 				}, reloadExecutor);
 			}
 
-			this.rpo$pending = InputRecording.start(manager);
+			InputRecording recording = InputRecording.start(manager);
+			this.rpo$pending = recording;
 			this.rpo$runVanilla = true;
-			return self.reload(currentReload, taskExecutor, preparationBarrier, reloadExecutor);
+			return self.reload(preparationBarrier, recording.manager(), preparationsProfiler, reloadProfiler, taskExecutor, reloadExecutor);
 		}));
-	}
-
-	@WrapOperation(
-		method = "reload",
-		at = @At(
-			value = "INVOKE",
-			target = "Lnet/minecraft/server/packs/resources/PreparableReloadListener$SharedState;resourceManager()Lnet/minecraft/server/packs/resources/ResourceManager;"
-		)
-	)
-	private ResourceManager rpo$recordReads(final PreparableReloadListener.SharedState currentReload, final Operation<ResourceManager> original) {
-		ResourceManager manager = original.call(currentReload);
-		InputRecording pending = this.rpo$pending;
-		return pending != null ? pending.manager() : manager;
 	}
 
 	@Inject(method = "apply", at = @At("HEAD"))
