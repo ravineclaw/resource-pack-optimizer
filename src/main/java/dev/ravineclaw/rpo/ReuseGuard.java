@@ -4,6 +4,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.client.gui.font.FontManager;
 import net.minecraft.client.renderer.LevelRenderer;
+import net.minecraft.client.renderer.texture.CubeMapTexture;
 import net.minecraft.client.renderer.texture.ReloadableTexture;
 import net.minecraft.client.renderer.texture.SimpleTexture;
 import net.minecraft.client.renderer.texture.SpriteContents;
@@ -46,7 +47,7 @@ public final class ReuseGuard {
 		ClientItemInfoLoader.class
 	);
 	public static final String[] FONTS = names(FontManager.class);
-	public static final String[] TEXTURES = names(TextureManager.class, ReloadableTexture.class, SimpleTexture.class, TextureContents.class);
+	public static final String[] TEXTURES = names(TextureManager.class, ReloadableTexture.class, SimpleTexture.class, CubeMapTexture.class, TextureContents.class);
 	public static final String[] CHUNKS = names(LevelRenderer.class);
 
 	private ReuseGuard() {

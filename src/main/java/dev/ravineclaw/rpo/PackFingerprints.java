@@ -14,7 +14,9 @@ import java.nio.file.FileSystems;
 import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -43,7 +45,19 @@ public final class PackFingerprints {
 
 	private static final Map<PackResources, Source> SOURCES = Collections.synchronizedMap(new WeakHashMap<>());
 	private static final Map<String, Integer> IMMUTABLE_IDS = new ConcurrentHashMap<>();
-	private static final Source UNKNOWN_SOURCE = (type, id, path, out) -> out.add(UNKNOWN);
+	private static final Source UNKNOWN_SOURCE = new Source() {
+		@Override
+		public void append(final PackType type, final ResourceLocation id, final String path, final LongArrayList out) {
+			out.add(UNKNOWN);
+		}
+
+		@Override
+		public long version(final PackType type) {
+			return UNKNOWN;
+		}
+	};
+	private static final Map<Path, FileToken> FILE_TOKENS = new ConcurrentHashMap<>();
+	private static final long RACY_MILLIS = 3000L;
 	private static final Map<String, List<Path>> FAILED_INDEX = new HashMap<>();
 
 	private PackFingerprints() {
@@ -51,6 +65,41 @@ public final class PackFingerprints {
 
 	public static void append(final PackResources pack, final PackType type, final ResourceLocation id, final LongArrayList out) {
 		source(pack).append(type, id, id.getNamespace() + "/" + id.getPath(), out);
+	}
+
+	public static long version(final PackResources pack, final PackType type) {
+		try {
+			return source(pack).version(type);
+		} catch (RuntimeException e) {
+			ResourcePackOptimizer.LOGGER.debug("Can't version pack {}", pack.packId(), e);
+			return UNKNOWN;
+		}
+	}
+
+	public static long hashStart() {
+		return 0x6A09E667F3BCC909L;
+	}
+
+	public static long hashMix(final long hash, final long value) {
+		return fmix(hash * 0x9E3779B97F4A7C15L + fmix(value ^ 0xC2B2AE3D27D4EB4FL));
+	}
+
+	public static long hashString(final String value) {
+		long hash = 0xCBF29CE484222325L;
+		for (int i = 0; i < value.length(); i++) {
+			hash = (hash ^ value.charAt(i)) * 0x100000001B3L;
+		}
+
+		return fmix(hash ^ value.length());
+	}
+
+	private static long fmix(long k) {
+		k ^= k >>> 33;
+		k *= 0xFF51AFD7ED558CCDL;
+		k ^= k >>> 33;
+		k *= 0xC4CEB9FE1A85EC53L;
+		k ^= k >>> 33;
+		return k;
 	}
 
 	private static Source source(final PackResources pack) {
@@ -84,9 +133,27 @@ public final class PackFingerprints {
 					layers.add(source(layer));
 				}
 
-				return (type, id, path, out) -> {
-					for (Source layer : layers) {
-						layer.append(type, id, path, out);
+				return new Source() {
+					@Override
+					public void append(final PackType type, final ResourceLocation id, final String path, final LongArrayList out) {
+						for (Source layer : layers) {
+							layer.append(type, id, path, out);
+						}
+					}
+
+					@Override
+					public long version(final PackType type) {
+						long hash = hashStart();
+						for (Source layer : layers) {
+							long version = layer.version(type);
+							if (version == UNKNOWN) {
+								return UNKNOWN;
+							}
+
+							hash = hashMix(hash, version);
+						}
+
+						return hash;
 					}
 				};
 			}
@@ -106,9 +173,13 @@ public final class PackFingerprints {
 		return new ImmutableSource(new WeakReference<>(pack), IMMUTABLE_BASE - index);
 	}
 
-	@FunctionalInterface
 	private interface Source {
 		void append(PackType type, ResourceLocation id, String path, LongArrayList out);
+
+		long version(PackType type);
+	}
+
+	private record FileToken(long size, long modified, long created, long hashedAt, long token) {
 	}
 
 	private record ImmutableSource(WeakReference<PackResources> pack, long present) implements Source {
@@ -116,6 +187,11 @@ public final class PackFingerprints {
 		public void append(final PackType type, final ResourceLocation id, final String path, final LongArrayList out) {
 			PackResources pack = this.pack.get();
 			out.add(pack == null ? UNKNOWN : pack.getResource(type, id) != null ? this.present : ABSENT);
+		}
+
+		@Override
+		public long version(final PackType type) {
+			return this.pack.get() == null ? UNKNOWN : hashMix(this.present, type.ordinal());
 		}
 	}
 
@@ -192,6 +268,22 @@ public final class PackFingerprints {
 		}
 
 		@Override
+		public long version(final PackType type) {
+			ZipFile zipFile;
+			try {
+				zipFile = (ZipFile)getOrCreate.invoke(this.access);
+			} catch (ReflectiveOperationException e) {
+				return UNKNOWN;
+			}
+
+			if (zipFile == null) {
+				return hashMix(hashStart(), ABSENT);
+			}
+
+			return hashMix(hashString(this.prefix), ZipIndex.of(zipFile).contentHash());
+		}
+
+		@Override
 		public void append(final PackType type, final ResourceLocation id, final String path, final LongArrayList out) {
 			ZipFile zipFile;
 			try {
@@ -242,8 +334,74 @@ public final class PackFingerprints {
 			}
 
 			for (Path file : files) {
-				out.add(this.tokens.computeIfAbsent(file, FolderSource::hash));
+				out.add(this.token(file));
 			}
+		}
+
+		@Override
+		public long version(final PackType type) {
+			Map<String, List<Path>> index = this.indexes.computeIfAbsent(type, this::walk);
+			if (index == FAILED_INDEX) {
+				return UNKNOWN;
+			}
+
+			String[] keys = index.keySet().toArray(String[]::new);
+			Arrays.sort(keys);
+			long hash = hashStart();
+			for (String key : keys) {
+				hash = hashMix(hash, hashString(key));
+				for (Path file : index.get(key)) {
+					long token = this.token(file);
+					if (token == UNKNOWN) {
+						return UNKNOWN;
+					}
+
+					hash = hashMix(hash, hashString(file.getFileName().toString()));
+					hash = hashMix(hash, token);
+				}
+			}
+
+			return hash;
+		}
+
+		private long token(final Path file) {
+			return this.tokens.computeIfAbsent(file, FolderSource::cachedHash);
+		}
+
+		private static long cachedHash(final Path file) {
+			BasicFileAttributes attributes;
+			try {
+				attributes = Files.readAttributes(file, BasicFileAttributes.class);
+			} catch (IOException | SecurityException e) {
+				FILE_TOKENS.remove(file);
+				return UNKNOWN;
+			}
+
+			if (attributes.isDirectory()) {
+				return DIRECTORY;
+			}
+
+			long size = attributes.size();
+			long modified = attributes.lastModifiedTime().toMillis();
+			long created = attributes.creationTime().toMillis();
+			FileToken known = FILE_TOKENS.get(file);
+			if (known != null
+				&& known.size() == size
+				&& known.modified() == modified
+				&& known.created() == created
+				&& known.hashedAt() - modified > RACY_MILLIS) {
+				return known.token();
+			}
+
+			long hashedAt = System.currentTimeMillis();
+			long token = hash(file);
+			if (token == UNKNOWN) {
+				FILE_TOKENS.remove(file);
+			} else {
+				FILE_TOKENS.put(file, new FileToken(size, modified, created, hashedAt, token));
+			}
+
+			return token;
 		}
 
 		private Map<String, List<Path>> walk(final PackType type) {
@@ -283,7 +441,7 @@ public final class PackFingerprints {
 					size += read;
 				}
 
-				return token(crc.getValue(), size);
+				return PackFingerprints.token(crc.getValue(), size);
 			} catch (IOException | SecurityException e) {
 				return UNKNOWN;
 			}
