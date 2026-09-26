@@ -1,7 +1,7 @@
 package dev.ravineclaw.rpo;
 
 import net.minecraft.client.renderer.texture.TextureContents;
-import org.jspecify.annotations.Nullable;
+import org.jetbrains.annotations.Nullable;
 
 public interface ReusableTexture {
 	TextureContents KEEP = new TextureContents(null, null);

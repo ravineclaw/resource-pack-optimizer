@@ -2,6 +2,25 @@ package dev.ravineclaw.rpo;
 
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import net.minecraft.client.gui.font.FontManager;
+import net.minecraft.client.renderer.LevelRenderer;
+import net.minecraft.client.renderer.texture.ReloadableTexture;
+import net.minecraft.client.renderer.texture.SimpleTexture;
+import net.minecraft.client.renderer.texture.SpriteContents;
+import net.minecraft.client.renderer.texture.SpriteLoader;
+import net.minecraft.client.renderer.texture.Stitcher;
+import net.minecraft.client.renderer.texture.TextureAtlas;
+import net.minecraft.client.renderer.texture.TextureContents;
+import net.minecraft.client.renderer.texture.TextureManager;
+import net.minecraft.client.renderer.texture.atlas.SpriteResourceLoader;
+import net.minecraft.client.renderer.texture.atlas.SpriteSourceList;
+import net.minecraft.client.renderer.texture.atlas.SpriteSources;
+import net.minecraft.client.resources.model.AtlasSet;
+import net.minecraft.client.resources.model.BlockStateModelLoader;
+import net.minecraft.client.resources.model.ClientItemInfoLoader;
+import net.minecraft.client.resources.model.ModelBakery;
+import net.minecraft.client.resources.model.ModelDiscovery;
+import net.minecraft.client.resources.model.ModelManager;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 import org.spongepowered.asm.mixin.transformer.ClassInfo;
 
@@ -9,42 +28,43 @@ public final class ReuseGuard {
 	private static final String OWN_CONFIG = "resource_pack_optimizer.mixins.json";
 	private static final Set<String> REPORTED = ConcurrentHashMap.newKeySet();
 
-	public static final String[] ATLASES = {
-		"net.minecraft.client.renderer.texture.SpriteLoader",
-		"net.minecraft.client.renderer.texture.TextureAtlas",
-		"net.minecraft.client.renderer.texture.SpriteContents",
-		"net.minecraft.client.renderer.texture.Stitcher",
-		"net.minecraft.client.resources.model.sprite.AtlasManager",
-		"net.minecraft.client.renderer.texture.atlas.SpriteSourceList",
-		"net.minecraft.client.renderer.texture.atlas.SpriteSources",
-		"net.minecraft.client.renderer.texture.atlas.SpriteResourceLoader"
+	public static final Class<?>[] ATLASES = {
+		SpriteLoader.class,
+		TextureAtlas.class,
+		SpriteContents.class,
+		Stitcher.class,
+		AtlasSet.class,
+		SpriteSourceList.class,
+		SpriteSources.class,
+		SpriteResourceLoader.class
 	};
-	public static final String[] MODELS = {
-		"net.minecraft.client.resources.model.ModelManager",
-		"net.minecraft.client.resources.model.ModelBakery",
-		"net.minecraft.client.resources.model.ModelDiscovery",
-		"net.minecraft.client.resources.model.BlockStateModelLoader",
-		"net.minecraft.client.resources.model.ClientItemInfoLoader"
+	public static final Class<?>[] MODELS = {
+		ModelManager.class,
+		ModelBakery.class,
+		ModelDiscovery.class,
+		BlockStateModelLoader.class,
+		ClientItemInfoLoader.class
 	};
-	public static final String[] FONTS = {
-		"net.minecraft.client.gui.font.FontManager"
+	public static final Class<?>[] FONTS = {
+		FontManager.class
 	};
-	public static final String[] TEXTURES = {
-		"net.minecraft.client.renderer.texture.TextureManager",
-		"net.minecraft.client.renderer.texture.ReloadableTexture",
-		"net.minecraft.client.renderer.texture.SimpleTexture",
-		"net.minecraft.client.renderer.texture.TextureContents"
+	public static final Class<?>[] TEXTURES = {
+		TextureManager.class,
+		ReloadableTexture.class,
+		SimpleTexture.class,
+		TextureContents.class
 	};
-	public static final String[] CHUNKS = {
-		"net.minecraft.client.renderer.extract.LevelExtractor"
+	public static final Class<?>[] CHUNKS = {
+		LevelRenderer.class
 	};
 
 	private ReuseGuard() {
 	}
 
-	public static boolean untouched(final String what, final String... classNames) {
+	public static boolean untouched(final String what, final Class<?>... classes) {
 		try {
-			for (String className : classNames) {
+			for (Class<?> type : classes) {
+				String className = type.getName();
 				ClassInfo info = ClassInfo.forName(className.replace('.', '/'));
 				if (info == null) {
 					return false;

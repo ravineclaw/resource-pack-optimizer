@@ -8,11 +8,9 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.server.packs.FilePackResources;
 import net.minecraft.server.packs.PackLocationInfo;
-import net.minecraft.server.packs.PackType;
 import net.minecraft.server.packs.PathPackResources;
-import net.minecraft.server.packs.metadata.pack.PackFormat;
 import net.minecraft.server.packs.repository.Pack;
-import org.jspecify.annotations.Nullable;
+import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -25,7 +23,7 @@ public abstract class PackMixin {
 	private static final Map<String, Pack.Metadata> RPO_METADATA_CACHE = new ConcurrentHashMap<>();
 
 	@Unique
-	private static @Nullable String rpo$cacheKey(final Pack.ResourcesSupplier resources, final PackFormat currentPackVersion, final PackType type) {
+	private static @Nullable String rpo$cacheKey(final Pack.ResourcesSupplier resources, final int currentPackVersion) {
 		try {
 			Path fingerprinted;
 			String kind;
@@ -44,8 +42,7 @@ public abstract class PackMixin {
 				return null;
 			}
 
-			return kind + '|' + fingerprinted.toAbsolutePath() + '|' + attributes.size() + '|' + attributes.lastModifiedTime().toMillis() + '|'
-				+ type.name() + '|' + currentPackVersion;
+			return kind + '|' + fingerprinted.toAbsolutePath() + '|' + attributes.size() + '|' + attributes.lastModifiedTime().toMillis() + '|' + currentPackVersion;
 		} catch (IOException | RuntimeException e) {
 			return null;
 		}
@@ -55,11 +52,10 @@ public abstract class PackMixin {
 	private static void rpo$cachedMetadata(
 		final PackLocationInfo location,
 		final Pack.ResourcesSupplier resources,
-		final PackFormat currentPackVersion,
-		final PackType type,
+		final int currentPackVersion,
 		final CallbackInfoReturnable<Pack.Metadata> cir
 	) {
-		String key = rpo$cacheKey(resources, currentPackVersion, type);
+		String key = rpo$cacheKey(resources, currentPackVersion);
 		if (key != null) {
 			Pack.Metadata cached = RPO_METADATA_CACHE.get(key);
 			if (cached != null) {
@@ -72,13 +68,12 @@ public abstract class PackMixin {
 	private static void rpo$storeMetadata(
 		final PackLocationInfo location,
 		final Pack.ResourcesSupplier resources,
-		final PackFormat currentPackVersion,
-		final PackType type,
+		final int currentPackVersion,
 		final CallbackInfoReturnable<Pack.Metadata> cir
 	) {
 		Pack.Metadata metadata = cir.getReturnValue();
 		if (metadata != null) {
-			String key = rpo$cacheKey(resources, currentPackVersion, type);
+			String key = rpo$cacheKey(resources, currentPackVersion);
 			if (key != null) {
 				RPO_METADATA_CACHE.put(key, metadata);
 			}

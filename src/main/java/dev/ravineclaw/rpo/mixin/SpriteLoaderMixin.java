@@ -8,17 +8,15 @@ import dev.ravineclaw.rpo.AtlasReuse;
 import dev.ravineclaw.rpo.InputRecording;
 import dev.ravineclaw.rpo.ReuseGuard;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.Options;
-import net.minecraft.client.TextureFilteringMethod;
 import net.minecraft.client.renderer.texture.SpriteLoader;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.metadata.MetadataSectionType;
 import net.minecraft.server.packs.resources.ResourceManager;
 import org.spongepowered.asm.mixin.Final;
@@ -33,21 +31,33 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class SpriteLoaderMixin {
 	@Unique
 	private static final ThreadLocal<Boolean> RPO_BYPASS = ThreadLocal.withInitial(() -> Boolean.FALSE);
+	@Unique
+	private static final ThreadLocal<Runnable> RPO_DEFERRED_MIPMAPS = new ThreadLocal<>();
 
 	@Shadow
 	@Final
-	private Identifier location;
+	private ResourceLocation location;
 	@Shadow
 	@Final
 	private int maxSupportedTextureSize;
+	@Shadow
+	@Final
+	private int minWidth;
+	@Shadow
+	@Final
+	private int minHeight;
 
-	@Inject(method = "loadAndStitch", at = @At("HEAD"), cancellable = true)
+	@Inject(
+		method = "loadAndStitch(Lnet/minecraft/server/packs/resources/ResourceManager;Lnet/minecraft/resources/ResourceLocation;ILjava/util/concurrent/Executor;Ljava/util/Collection;)Ljava/util/concurrent/CompletableFuture;",
+		at = @At("HEAD"),
+		cancellable = true
+	)
 	private void rpo$reuseUnchanged(
 		final ResourceManager manager,
-		final Identifier atlasInfoLocation,
+		final ResourceLocation atlasInfoLocation,
 		final int maxMipmapLevels,
 		final Executor taskExecutor,
-		final Set<MetadataSectionType<?>> additionalMetadata,
+		final Collection<MetadataSectionType<?>> additionalMetadata,
 		final CallbackInfoReturnable<CompletableFuture<SpriteLoader.Preparations>> cir
 	) {
 		if (RPO_BYPASS.get() || !InputRecording.isTrackable(manager) || !ReuseGuard.untouched("atlases", ReuseGuard.ATLASES)) {
@@ -55,12 +65,13 @@ public abstract class SpriteLoaderMixin {
 		}
 
 		SpriteLoader self = (SpriteLoader)(Object)this;
-		Identifier atlas = this.location;
-		Options options = Minecraft.getInstance().options;
-		int anisotropyBit = options.textureFiltering().get() != TextureFilteringMethod.ANISOTROPIC ? 0 : options.maxAnisotropyBit().get();
-		AtlasReuse.Key key = new AtlasReuse.Key(atlasInfoLocation, maxMipmapLevels, anisotropyBit, this.maxSupportedTextureSize, Set.copyOf(additionalMetadata));
+		ResourceLocation atlas = this.location;
+		AtlasReuse.Key key = new AtlasReuse.Key(atlasInfoLocation, maxMipmapLevels, this.maxSupportedTextureSize, Set.copyOf(additionalMetadata));
 		AtlasReuse.Entry current = AtlasReuse.uploaded(atlas);
-		CompletableFuture<Boolean> unchanged = current != null && current.key().equals(key)
+		CompletableFuture<Boolean> unchanged = current != null
+			&& current.key().equals(key)
+			&& current.preparations().width() == this.minWidth
+			&& current.preparations().height() == this.minHeight
 			? CompletableFuture.supplyAsync(() -> current.recording().matches(manager), taskExecutor)
 			: CompletableFuture.completedFuture(Boolean.FALSE);
 		cir.setReturnValue(unchanged.thenCompose(same -> {
@@ -91,18 +102,35 @@ public abstract class SpriteLoaderMixin {
 			target = "Ljava/util/concurrent/CompletableFuture;runAsync(Ljava/lang/Runnable;Ljava/util/concurrent/Executor;)Ljava/util/concurrent/CompletableFuture;"
 		)
 	)
-	private CompletableFuture<Void> rpo$parallelMipmaps(
-		final Runnable task,
-		final Executor executor,
-		final Operation<CompletableFuture<Void>> original,
-		@Local(name = "result") final Map<Identifier, TextureAtlasSprite> result,
-		@Local(name = "mipLevel") final int mipLevel,
-		@Local(name = "width") final int width,
-		@Local(name = "height") final int height
+	private CompletableFuture<Void> rpo$deferMipmaps(final Runnable task, final Executor executor, final Operation<CompletableFuture<Void>> original) {
+		RPO_DEFERRED_MIPMAPS.set(task);
+		return CompletableFuture.completedFuture(null);
+	}
+
+	@WrapOperation(
+		method = "stitch",
+		at = @At(
+			value = "NEW",
+			target = "(IIILnet/minecraft/client/renderer/texture/TextureAtlasSprite;Ljava/util/Map;Ljava/util/concurrent/CompletableFuture;)Lnet/minecraft/client/renderer/texture/SpriteLoader$Preparations;"
+		)
+	)
+	private SpriteLoader.Preparations rpo$parallelMipmaps(
+		final int width,
+		final int height,
+		final int mipLevel,
+		final TextureAtlasSprite missing,
+		final Map<ResourceLocation, TextureAtlasSprite> regions,
+		final CompletableFuture<Void> readyForUpload,
+		final Operation<SpriteLoader.Preparations> original,
+		@Local(argsOnly = true) final Executor executor
 	) {
+		Runnable deferred = RPO_DEFERRED_MIPMAPS.get();
+		RPO_DEFERRED_MIPMAPS.remove();
 		CompletableFuture<Void> mipmaps;
-		if (mipLevel > 0 && result.size() > 1) {
-			List<TextureAtlasSprite> sprites = new ArrayList<>(result.values());
+		if (deferred == null) {
+			mipmaps = readyForUpload;
+		} else if (mipLevel > 0 && regions.size() > 1) {
+			List<TextureAtlasSprite> sprites = new ArrayList<>(regions.values());
 			int chunkCount = Math.min(sprites.size(), Math.max(1, Runtime.getRuntime().availableProcessors() * 2));
 			List<List<TextureAtlasSprite>> chunks = new ArrayList<>(chunkCount);
 			for (int i = 0; i < chunkCount; i++) {
@@ -125,9 +153,9 @@ public abstract class SpriteLoaderMixin {
 
 			mipmaps = CompletableFuture.allOf(tasks);
 		} else {
-			mipmaps = original.call(task, executor);
+			mipmaps = CompletableFuture.runAsync(deferred, executor);
 		}
 
-		return AtlasBuilder.buildAfter(mipmaps, this.location, result, width, height, mipLevel, executor);
+		return original.call(width, height, mipLevel, missing, regions, AtlasBuilder.buildAfter(mipmaps, this.location, regions, width, height, mipLevel, executor));
 	}
 }

@@ -7,8 +7,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.lang.ref.WeakReference;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.nio.file.FileSystems;
 import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
@@ -26,7 +24,7 @@ import java.util.zip.CRC32C;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.CompositePackResources;
 import net.minecraft.server.packs.FilePackResources;
 import net.minecraft.server.packs.PackResources;
@@ -48,7 +46,7 @@ public final class PackFingerprints {
 	private PackFingerprints() {
 	}
 
-	public static void append(final PackResources pack, final PackType type, final Identifier id, final LongArrayList out) {
+	public static void append(final PackResources pack, final PackType type, final ResourceLocation id, final LongArrayList out) {
 		source(pack).append(type, id, id.getNamespace() + "/" + id.getPath(), out);
 	}
 
@@ -107,12 +105,12 @@ public final class PackFingerprints {
 
 	@FunctionalInterface
 	private interface Source {
-		void append(PackType type, Identifier id, String path, LongArrayList out);
+		void append(PackType type, ResourceLocation id, String path, LongArrayList out);
 	}
 
 	private record ImmutableSource(WeakReference<PackResources> pack, long present) implements Source {
 		@Override
-		public void append(final PackType type, final Identifier id, final String path, final LongArrayList out) {
+		public void append(final PackType type, final ResourceLocation id, final String path, final LongArrayList out) {
 			PackResources pack = this.pack.get();
 			out.add(pack == null ? UNKNOWN : pack.getResource(type, id) != null ? this.present : ABSENT);
 		}
@@ -126,42 +124,22 @@ public final class PackFingerprints {
 		return crc << 32 | size;
 	}
 
-	private record ZipSource(Object access, String prefix) implements Source {
-		private static volatile Field accessField;
-		private static volatile Field prefixField;
-		private static volatile Method getOrCreate;
-
+	private record ZipSource(ZipAccess access, String prefix) implements Source {
 		static Source of(final PackResources pack) {
-			try {
-				if (getOrCreate == null) {
-					Field access = FilePackResources.class.getDeclaredField("zipFileAccess");
-					access.setAccessible(true);
-					Field prefix = FilePackResources.class.getDeclaredField("prefix");
-					prefix.setAccessible(true);
-					Method method = access.getType().getDeclaredMethod("getOrCreateZipFile");
-					method.setAccessible(true);
-					accessField = access;
-					prefixField = prefix;
-					getOrCreate = method;
-				}
-
-				return new ZipSource(accessField.get(pack), (String)prefixField.get(pack));
-			} catch (ReflectiveOperationException | RuntimeException e) {
-				ResourcePackOptimizer.LOGGER.debug("Can't read zip of pack {}", pack.packId(), e);
+			ZipPack zipPack = (ZipPack)pack;
+			ZipAccess access = zipPack.rpo$zipAccess();
+			String prefix = zipPack.rpo$prefix();
+			if (access == null || prefix == null) {
+				ResourcePackOptimizer.LOGGER.debug("Can't read zip of pack {}", pack.packId());
 				return UNKNOWN_SOURCE;
 			}
+
+			return new ZipSource(access, prefix);
 		}
 
 		@Override
-		public void append(final PackType type, final Identifier id, final String path, final LongArrayList out) {
-			ZipFile zipFile;
-			try {
-				zipFile = (ZipFile)getOrCreate.invoke(this.access);
-			} catch (ReflectiveOperationException e) {
-				out.add(UNKNOWN);
-				return;
-			}
-
+		public void append(final PackType type, final ResourceLocation id, final String path, final LongArrayList out) {
+			ZipFile zipFile = this.access.rpo$getOrCreateZipFile();
 			if (zipFile == null) {
 				out.add(ABSENT);
 				return;
@@ -189,7 +167,7 @@ public final class PackFingerprints {
 		}
 
 		@Override
-		public void append(final PackType type, final Identifier id, final String path, final LongArrayList out) {
+		public void append(final PackType type, final ResourceLocation id, final String path, final LongArrayList out) {
 			Map<String, List<Path>> index = this.indexes.computeIfAbsent(type, this::walk);
 			if (index == FAILED_INDEX) {
 				out.add(UNKNOWN);
