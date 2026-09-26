@@ -4,11 +4,13 @@
 	"compatibilityLevel": "JAVA_21",
 	"plugin": "dev.ravineclaw.rpo.mixin.RpoMixinPlugin",
 	"client": [
+		"CachedFontProviderMixin",
 		"ColorMapListenerMixin",
 		"CompilationCacheMixin",
 		"CompositePackResourcesAccessor",
 		"FilePackResourcesMixin",
 		"FileResourcesSupplierAccessor",
+		"FontAccessor",
 		"FontManagerMixin",
 		"GameRendererReloadMixin",
 		"HttpUtilMixin",

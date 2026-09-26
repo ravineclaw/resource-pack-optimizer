@@ -2,17 +2,24 @@ package dev.ravineclaw.rpo.mixin;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import dev.ravineclaw.rpo.GlyphCacheReset;
 import dev.ravineclaw.rpo.InputRecording;
 import dev.ravineclaw.rpo.ListenerReuse;
 import dev.ravineclaw.rpo.ReuseGuard;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import net.minecraft.client.gui.font.AtlasGlyphProvider;
 import net.minecraft.client.gui.font.FontManager;
+import net.minecraft.client.resources.model.AtlasManager;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.PreparableReloadListener;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.util.Unit;
 import org.jspecify.annotations.Nullable;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -21,6 +28,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(FontManager.class)
 public abstract class FontManagerMixin {
+	@Shadow
+	@Final
+	private Map<Identifier, AtlasGlyphProvider> atlasProviders;
+	@Shadow
+	@Final
+	private AtlasManager atlasManager;
+
 	@Unique
 	private volatile @Nullable InputRecording rpo$applied;
 	@Unique
@@ -49,16 +63,24 @@ public abstract class FontManagerMixin {
 		}
 
 		FontManager self = (FontManager)(Object)this;
-		cir.setReturnValue(ListenerReuse.canKeep(this.rpo$applied, currentReload, taskExecutor).thenCompose(keep -> {
+		cir.setReturnValue(ListenerReuse.inputsMatch(this.rpo$applied, currentReload, taskExecutor).thenCompose(keep -> {
 			if (keep) {
-				return preparationBarrier.wait(Unit.INSTANCE).thenAcceptAsync(unused -> {
-				}, reloadExecutor);
+				return preparationBarrier.wait(Unit.INSTANCE).thenAcceptAsync(unused -> this.rpo$refreshAtlasGlyphs(), reloadExecutor);
 			}
 
 			this.rpo$pending = InputRecording.start(manager);
 			this.rpo$runVanilla = true;
 			return self.reload(currentReload, taskExecutor, preparationBarrier, reloadExecutor);
 		}));
+	}
+
+	@Unique
+	private void rpo$refreshAtlasGlyphs() {
+		FontManager self = (FontManager)(Object)this;
+		this.atlasProviders.clear();
+		this.atlasManager.forEach((atlasId, atlasTexture) -> this.atlasProviders.put(atlasId, new AtlasGlyphProvider(atlasTexture)));
+		((GlyphCacheReset)((FontAccessor)self.createFont()).rpo$provider()).rpo$invalidate();
+		((GlyphCacheReset)((FontAccessor)self.createFontFilterFishy()).rpo$provider()).rpo$invalidate();
 	}
 
 	@WrapOperation(

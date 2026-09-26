@@ -4,6 +4,7 @@ import dev.ravineclaw.rpo.InputRecording;
 import dev.ravineclaw.rpo.ReusableTexture;
 import dev.ravineclaw.rpo.ReuseGuard;
 import java.io.IOException;
+import net.minecraft.client.renderer.texture.CubeMapTexture;
 import net.minecraft.client.renderer.texture.ReloadableTexture;
 import net.minecraft.client.renderer.texture.SimpleTexture;
 import net.minecraft.client.renderer.texture.TextureContents;
@@ -32,7 +33,7 @@ public abstract class TextureManagerMixin {
 		final ResourceManager manager, final Identifier location, final ReloadableTexture texture, final CallbackInfoReturnable<TextureContents> cir
 	) throws IOException {
 		if (RPO_BYPASS.get()
-			|| texture.getClass() != SimpleTexture.class
+			|| texture.getClass() != SimpleTexture.class && texture.getClass() != CubeMapTexture.class
 			|| !InputRecording.isTrackable(manager)
 			|| !ReuseGuard.untouched("textures", ReuseGuard.TEXTURES)) {
 			return;
