@@ -25,6 +25,7 @@
 		"ReloadableResourceManagerMixin",
 		"ReloadableTextureMixin",
 		"ShaderManagerMixin",
+		"SharedZipFileAccessMixin",
 		"SimpleReloadInstanceMixin",
 		"SoundEngineMixin",
 		"SoundManagerMixin",
