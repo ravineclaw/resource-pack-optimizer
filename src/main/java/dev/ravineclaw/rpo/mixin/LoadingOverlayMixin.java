@@ -2,6 +2,7 @@ package dev.ravineclaw.rpo.mixin;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import dev.ravineclaw.rpo.BackgroundReload;
 import dev.ravineclaw.rpo.ReloadChanges;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -16,6 +17,7 @@ import net.minecraft.util.Mth;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -70,23 +72,22 @@ public abstract class LoadingOverlayMixin {
 		}
 
 		ci.cancel();
+		boolean background = BackgroundReload.isCurrent(this);
 		if (this.fadeInStart == -1L) {
 			this.fadeInStart = Util.getMillis();
 		}
 
 		if (this.fadeOutStart > -1L) {
-			if (this.minecraft.getOverlay() == (Object)this) {
-				this.minecraft.setOverlay(null);
-			}
+			this.rpo$close();
 
-			if (this.minecraft.screen != null) {
+			if (this.minecraft.screen != null && !background) {
 				this.minecraft.screen.render(graphics, mouseX, mouseY, partialTick);
 			}
 
 			return;
 		}
 
-		if (this.minecraft.screen != null) {
+		if (this.minecraft.screen != null && !background) {
 			this.minecraft.screen.render(graphics, mouseX, mouseY, partialTick);
 		}
 
@@ -103,9 +104,7 @@ public abstract class LoadingOverlayMixin {
 				this.minecraft.screen.init(this.minecraft, graphics.guiWidth(), graphics.guiHeight());
 			}
 
-			if (this.minecraft.getOverlay() == (Object)this) {
-				this.minecraft.setOverlay(null);
-			}
+			this.rpo$close();
 
 			return;
 		}
@@ -114,5 +113,16 @@ public abstract class LoadingOverlayMixin {
 		int width = graphics.guiWidth();
 		graphics.fill(0, 0, width, 2, FastColor.ARGB32.color(96, 0, 0, 0));
 		graphics.fill(0, 0, Mth.ceil(width * this.currentProgress), 2, FastColor.ARGB32.color(220, 255, 255, 255));
+	}
+
+	@Unique
+	private void rpo$close() {
+		if (BackgroundReload.finish(this)) {
+			return;
+		}
+
+		if (this.minecraft.getOverlay() == (Object)this) {
+			this.minecraft.setOverlay(null);
+		}
 	}
 }
