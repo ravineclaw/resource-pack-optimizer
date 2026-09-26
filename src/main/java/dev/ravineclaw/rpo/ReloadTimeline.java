@@ -12,6 +12,8 @@ public final class ReloadTimeline {
 	public static final boolean ENABLED = Boolean.getBoolean("rpo.selftest");
 	private static final Map<String, long[]> TIMES = new ConcurrentHashMap<>();
 	private static volatile long start;
+	private static volatile long lastFrame;
+	private static volatile long longestFrame;
 
 	private ReloadTimeline() {
 	}
@@ -19,6 +21,25 @@ public final class ReloadTimeline {
 	public static void begin() {
 		TIMES.clear();
 		start = System.nanoTime();
+	}
+
+	public static void frame() {
+		long now = System.nanoTime();
+		long last = lastFrame;
+		if (last != 0L && now - last > longestFrame) {
+			longestFrame = now - last;
+		}
+
+		lastFrame = now;
+	}
+
+	public static void resetFrames() {
+		lastFrame = 0L;
+		longestFrame = 0L;
+	}
+
+	public static long longestFrameMillis() {
+		return longestFrame / 1_000_000L;
 	}
 
 	public static PreparableReloadListener.PreparationBarrier timed(

@@ -9,6 +9,7 @@ import net.minecraft.server.packs.PackResources;
 import net.minecraft.server.packs.PackType;
 import net.minecraft.server.packs.resources.MultiPackResourceManager;
 import net.minecraft.server.packs.resources.ResourceFilterSection;
+import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -27,6 +28,8 @@ public abstract class MultiPackResourceManagerMixin implements PackStack {
 	private PackType rpo$type;
 	@Unique
 	private List<String> rpo$filters;
+	@Unique
+	private volatile long @Nullable [] rpo$versions;
 
 	@WrapOperation(
 		method = "<init>",
@@ -79,5 +82,15 @@ public abstract class MultiPackResourceManagerMixin implements PackStack {
 	@Override
 	public List<String> rpo$filters() {
 		return this.rpo$filters;
+	}
+
+	@Override
+	public long @Nullable [] rpo$versions() {
+		return this.rpo$versions;
+	}
+
+	@Override
+	public void rpo$setVersions(final long[] versions) {
+		this.rpo$versions = versions;
 	}
 }

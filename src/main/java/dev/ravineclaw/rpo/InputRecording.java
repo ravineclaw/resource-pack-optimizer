@@ -26,15 +26,36 @@ public final class InputRecording {
 	private volatile @Nullable Set<String> namespaces;
 	private volatile boolean untrackable;
 	private final RecordingResourceManager manager;
+	private final long @Nullable [] versions;
 
 	private InputRecording(final PackStack stack, final ResourceManager delegate) {
 		this.type = stack.rpo$type();
 		this.filters = nonEmpty(stack.rpo$filters());
+		this.versions = versions(stack);
 		this.manager = new RecordingResourceManager(delegate, this);
 	}
 
 	public static ResourceManager unwrap(final ResourceManager manager) {
 		return manager instanceof CurrentResources current ? current.rpo$resources() : manager;
+	}
+
+	private static long @Nullable [] versions(final PackStack stack) {
+		long[] versions = stack.rpo$versions();
+		if (versions == null) {
+			List<PackResources> packs = stack.rpo$packs();
+			versions = new long[packs.size()];
+			for (int i = 0; i < versions.length; i++) {
+				versions[i] = PackFingerprints.version(packs.get(i), stack.rpo$type());
+				if (versions[i] == PackFingerprints.UNKNOWN) {
+					versions = PackStack.UNVERSIONED;
+					break;
+				}
+			}
+
+			stack.rpo$setVersions(versions);
+		}
+
+		return versions == PackStack.UNVERSIONED ? null : versions;
 	}
 
 	public static boolean isTrackable(final ResourceManager manager) {
@@ -64,6 +85,10 @@ public final class InputRecording {
 			PackStack stack = (PackStack)other;
 			if (stack.rpo$type() != this.type || !nonEmpty(stack.rpo$filters()).equals(this.filters)) {
 				return false;
+			}
+
+			if (this.versions != null && Arrays.equals(this.versions, versions(stack))) {
+				return true;
 			}
 
 			Set<String> namespaces = this.namespaces;
