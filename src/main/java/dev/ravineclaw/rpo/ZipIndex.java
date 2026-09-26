@@ -16,6 +16,7 @@ public final class ZipIndex {
 
 	private final String[] names;
 	private final ZipEntry[] entries;
+	private final long contentHash;
 
 	private ZipIndex(final ZipFile zipFile) {
 		List<ZipEntry> all = new ArrayList<>(zipFile.size());
@@ -30,6 +31,19 @@ public final class ZipIndex {
 		for (int i = 0; i < this.entries.length; i++) {
 			this.names[i] = this.entries[i].getName();
 		}
+
+		long hash = PackFingerprints.hashStart();
+		for (ZipEntry entry : this.entries) {
+			hash = PackFingerprints.hashMix(hash, PackFingerprints.hashString(entry.getName()));
+			hash = PackFingerprints.hashMix(hash, entry.getCrc());
+			hash = PackFingerprints.hashMix(hash, entry.getSize());
+		}
+
+		this.contentHash = hash;
+	}
+
+	public long contentHash() {
+		return this.contentHash;
 	}
 
 	public static ZipIndex of(final ZipFile zipFile) {
