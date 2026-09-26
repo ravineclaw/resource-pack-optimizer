@@ -10,11 +10,11 @@ import dev.ravineclaw.rpo.AtlasBuilder;
 import dev.ravineclaw.rpo.AtlasReuse;
 import dev.ravineclaw.rpo.ReloadChanges;
 import dev.ravineclaw.rpo.ResourcePackOptimizer;
-import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.client.renderer.texture.SpriteLoader;
 import net.minecraft.client.renderer.texture.TextureAtlas;
-import net.minecraft.resources.Identifier;
-import org.jspecify.annotations.Nullable;
+import net.minecraft.client.renderer.texture.TextureAtlasSprite;
+import net.minecraft.resources.ResourceLocation;
+import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -27,21 +27,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class TextureAtlasMixin {
 	@Shadow
 	@Final
-	private Identifier location;
-	@Shadow
-	private int width;
-	@Shadow
-	private int height;
-	@Shadow
-	private int mipLevelCount;
+	private ResourceLocation location;
 
 	@Unique
 	private AtlasBuilder.@Nullable Built rpo$prebuilt;
 	@Unique
-	private boolean rpo$recreating;
-
-	@Shadow
-	protected abstract void uploadAnimationFrames();
+	private boolean rpo$tilesWritten;
+	@Unique
+	private boolean rpo$uploading;
 
 	@Inject(method = "upload", at = @At("HEAD"), cancellable = true)
 	private void rpo$takePrebuilt(final SpriteLoader.Preparations preparations, final CallbackInfo ci) {
@@ -52,69 +45,88 @@ public abstract class TextureAtlasMixin {
 		}
 
 		AtlasReuse.uploadStarted(this.location);
-		if (this.rpo$prebuilt != null) {
-			this.rpo$prebuilt.close();
+		this.rpo$uploading = true;
+		this.rpo$releasePrebuilt();
+		AtlasBuilder.Built built = AtlasBuilder.take(this.location, preparations.regions());
+		if (built != null && !rpo$matches(built, preparations)) {
+			built.close();
+			built = null;
 		}
 
-		this.rpo$prebuilt = AtlasBuilder.take(this.location, preparations.regions());
+		this.rpo$prebuilt = built;
+	}
+
+	@Unique
+	private static boolean rpo$matches(final AtlasBuilder.Built built, final SpriteLoader.Preparations preparations) {
+		AtlasBuilder.Level[] levels = built.levels();
+		if (levels.length != preparations.mipLevel() + 1) {
+			return false;
+		}
+
+		for (int level = 0; level < levels.length; level++) {
+			if (levels[level].width() != Math.max(1, preparations.width() >> level) || levels[level].height() != Math.max(1, preparations.height() >> level)) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	@WrapOperation(
+		method = "upload",
+		at = @At(
+			value = "INVOKE",
+			target = "Lnet/minecraft/client/renderer/texture/TextureAtlasSprite;uploadFirstFrame(Lcom/mojang/blaze3d/textures/GpuTexture;)V"
+		)
+	)
+	private void rpo$uploadPrebuilt(final TextureAtlasSprite sprite, final GpuTexture texture, final Operation<Void> original) {
+		AtlasBuilder.Built built = this.rpo$prebuilt;
+		if (built != null && !this.rpo$tilesWritten) {
+			try {
+				CommandEncoder encoder = RenderSystem.getDevice().createCommandEncoder();
+				AtlasBuilder.Level[] levels = built.levels();
+				for (int level = 0; level < levels.length; level++) {
+					for (AtlasBuilder.Tile tile : levels[level].tiles()) {
+						encoder.writeToTexture(texture, tile.pixels(), NativeImage.Format.RGBA, level, 0, tile.x(), tile.y(), tile.width(), tile.height());
+					}
+				}
+
+				this.rpo$tilesWritten = true;
+			} catch (RuntimeException e) {
+				ResourcePackOptimizer.LOGGER.warn("Fast upload of atlas {} failed, falling back to vanilla", this.location, e);
+				this.rpo$releasePrebuilt();
+				built = null;
+			}
+		}
+
+		if (built != null && built.covered().contains(sprite)) {
+			return;
+		}
+
+		original.call(sprite, texture);
 	}
 
 	@Inject(method = "upload", at = @At("RETURN"))
 	private void rpo$rememberUpload(final SpriteLoader.Preparations preparations, final CallbackInfo ci) {
+		this.rpo$uploading = false;
+		this.rpo$releasePrebuilt();
 		AtlasReuse.uploadFinished(this.location, preparations);
 	}
 
-	@WrapOperation(method = "createTexture", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/texture/TextureAtlas;close()V"))
-	private void rpo$recreate(final TextureAtlas atlas, final Operation<Void> original) {
-		this.rpo$recreating = true;
-		try {
-			original.call(atlas);
-		} finally {
-			this.rpo$recreating = false;
+	@Unique
+	private void rpo$releasePrebuilt() {
+		if (this.rpo$prebuilt != null) {
+			this.rpo$prebuilt.close();
+			this.rpo$prebuilt = null;
 		}
+
+		this.rpo$tilesWritten = false;
 	}
 
-	@Inject(method = "close", at = @At("HEAD"))
+	@Inject(method = "clearTextureData", at = @At("HEAD"))
 	private void rpo$forget(final CallbackInfo ci) {
-		if (!this.rpo$recreating) {
+		if (!this.rpo$uploading) {
 			AtlasReuse.forget(this.location);
-		}
-	}
-
-	@Inject(method = "uploadInitialContents", at = @At("HEAD"), cancellable = true)
-	private void rpo$uploadPrebuilt(final CallbackInfo ci) {
-		AtlasBuilder.Built built = this.rpo$prebuilt;
-		this.rpo$prebuilt = null;
-		if (built == null) {
-			return;
-		}
-
-		try {
-			AtlasBuilder.Level[] levels = built.levels();
-			if (levels.length != this.mipLevelCount) {
-				return;
-			}
-
-			for (int level = 0; level < levels.length; level++) {
-				if (levels[level].width() != Math.max(1, this.width >> level) || levels[level].height() != Math.max(1, this.height >> level)) {
-					return;
-				}
-			}
-
-			GpuTexture texture = ((AbstractTexture)(Object)this).getTexture();
-			CommandEncoder encoder = RenderSystem.getDevice().createCommandEncoder();
-			for (int level = 0; level < levels.length; level++) {
-				for (AtlasBuilder.Tile tile : levels[level].tiles()) {
-					encoder.writeToTexture(texture, tile.pixels(), NativeImage.Format.RGBA, level, 0, tile.x(), tile.y(), tile.width(), tile.height());
-				}
-			}
-
-			this.uploadAnimationFrames();
-			ci.cancel();
-		} catch (RuntimeException e) {
-			ResourcePackOptimizer.LOGGER.warn("Fast upload of atlas {} failed, falling back to vanilla", this.location, e);
-		} finally {
-			built.close();
 		}
 	}
 }

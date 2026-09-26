@@ -7,7 +7,7 @@ import java.util.concurrent.Executor;
 import net.minecraft.client.renderer.texture.SpriteLoader;
 import net.minecraft.client.resources.model.AtlasManager;
 import net.minecraft.server.packs.resources.PreparableReloadListener;
-import org.jspecify.annotations.Nullable;
+import org.jetbrains.annotations.Nullable;
 
 public final class ListenerReuse {
 	private ListenerReuse() {

@@ -31,7 +31,6 @@
 		"SpriteContentsAccessor",
 		"SpriteLoaderMixin",
 		"TextureAtlasMixin",
-		"TextureAtlasSpriteAccessor",
 		"TextureManagerMixin",
 		"VanillaPackResourcesMixin"
 	],

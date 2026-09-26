@@ -8,7 +8,7 @@ import net.minecraft.client.sounds.SoundBufferLibrary;
 import net.minecraft.client.sounds.SoundEngine;
 import net.minecraft.client.sounds.SoundManager;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import org.slf4j.Logger;
@@ -23,7 +23,7 @@ public abstract class SoundEngineMixin implements SoftSoundReload {
 	private static Logger LOGGER;
 	@Shadow
 	@Final
-	private static Set<Identifier> ONLY_WARN_ONCE;
+	private static Set<ResourceLocation> ONLY_WARN_ONCE;
 	@Shadow
 	@Final
 	private SoundManager soundManager;
@@ -52,7 +52,7 @@ public abstract class SoundEngineMixin implements SoftSoundReload {
 		ONLY_WARN_ONCE.clear();
 		for (SoundEvent sound : BuiltInRegistries.SOUND_EVENT) {
 			if (sound != SoundEvents.EMPTY) {
-				Identifier location = sound.location();
+				ResourceLocation location = sound.location();
 				if (this.soundManager.getSoundEvent(location) == null) {
 					LOGGER.warn("Missing sound for event: {}", BuiltInRegistries.SOUND_EVENT.getKey(sound));
 					ONLY_WARN_ONCE.add(location);

@@ -9,19 +9,19 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.PackResources;
 import net.minecraft.server.packs.PackType;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
-import org.jspecify.annotations.Nullable;
+import org.jetbrains.annotations.Nullable;
 
 public final class InputRecording {
 	private static final long PACK_END = -8L;
 	private static final long FILTER_MARKER = -1_000_000L;
 	private final PackType type;
 	private final List<String> filters;
-	private final Map<Identifier, long[]> lookups = new ConcurrentHashMap<>();
+	private final Map<ResourceLocation, long[]> lookups = new ConcurrentHashMap<>();
 	private final Map<ListingKey, Listing> listings = new ConcurrentHashMap<>();
 	private volatile @Nullable Set<String> namespaces;
 	private volatile boolean untrackable;
@@ -66,7 +66,7 @@ public final class InputRecording {
 			}
 
 			LongArrayList scratch = new LongArrayList();
-			for (Map.Entry<Identifier, long[]> lookup : this.lookups.entrySet()) {
+			for (Map.Entry<ResourceLocation, long[]> lookup : this.lookups.entrySet()) {
 				long[] now = signature(stack, lookup.getKey(), scratch);
 				if (now == null || !Arrays.equals(now, lookup.getValue())) {
 					return false;
@@ -75,7 +75,7 @@ public final class InputRecording {
 
 			for (Map.Entry<ListingKey, Listing> entry : this.listings.entrySet()) {
 				ListingKey key = entry.getKey();
-				Set<Identifier> ids = key.stacks()
+				Set<ResourceLocation> ids = key.stacks()
 					? other.listResourceStacks(key.directory(), key.selector()).keySet()
 					: other.listResources(key.directory(), key.selector()).keySet();
 				Listing now = listing(stack, ids, scratch);
@@ -108,7 +108,7 @@ public final class InputRecording {
 		this.untrackable = true;
 	}
 
-	void recordLookup(final ResourceManager delegate, final Identifier id) {
+	void recordLookup(final ResourceManager delegate, final ResourceLocation id) {
 		if (this.untrackable || this.lookups.containsKey(id)) {
 			return;
 		}
@@ -121,7 +121,7 @@ public final class InputRecording {
 		}
 	}
 
-	void recordListing(final ResourceManager delegate, final String directory, final Predicate<Identifier> selector, final boolean stacks, final Set<Identifier> ids) {
+	void recordListing(final ResourceManager delegate, final String directory, final Predicate<ResourceLocation> selector, final boolean stacks, final Set<ResourceLocation> ids) {
 		if (this.untrackable) {
 			return;
 		}
@@ -143,14 +143,14 @@ public final class InputRecording {
 		this.namespaces = Set.copyOf(namespaces);
 	}
 
-	private static long @Nullable [] signature(final PackStack stack, final Identifier id, final LongArrayList scratch) {
+	private static long @Nullable [] signature(final PackStack stack, final ResourceLocation id, final LongArrayList scratch) {
 		scratch.clear();
 		appendSignature(stack.rpo$packs(), stack.rpo$filters(), stack.rpo$type(), id, scratch);
 		return scratch.contains(PackFingerprints.UNKNOWN) ? null : scratch.toLongArray();
 	}
 
-	private static void appendSignature(final List<PackResources> packs, final List<String> filters, final PackType type, final Identifier id, final LongArrayList out) {
-		Identifier metadata = id.withPath(id.getPath() + ".mcmeta");
+	private static void appendSignature(final List<PackResources> packs, final List<String> filters, final PackType type, final ResourceLocation id, final LongArrayList out) {
+		ResourceLocation metadata = id.withPath(id.getPath() + ".mcmeta");
 		int filterIndex = 0;
 		for (int i = 0; i < packs.size(); i++) {
 			boolean filtered = !filters.get(i).isEmpty();
@@ -174,21 +174,21 @@ public final class InputRecording {
 		}
 	}
 
-	private static @Nullable Listing listing(final PackStack stack, final Set<Identifier> ids, final LongArrayList scratch) {
-		Identifier[] sorted = ids.toArray(Identifier[]::new);
+	private static @Nullable Listing listing(final PackStack stack, final Set<ResourceLocation> ids, final LongArrayList scratch) {
+		ResourceLocation[] sorted = ids.toArray(ResourceLocation[]::new);
 		Arrays.sort(sorted);
 		scratch.clear();
-		for (Identifier id : sorted) {
+		for (ResourceLocation id : sorted) {
 			appendSignature(stack.rpo$packs(), stack.rpo$filters(), stack.rpo$type(), id, scratch);
 		}
 
 		return scratch.contains(PackFingerprints.UNKNOWN) ? null : new Listing(sorted, scratch.toLongArray());
 	}
 
-	private record ListingKey(String directory, Predicate<Identifier> selector, boolean stacks) {
+	private record ListingKey(String directory, Predicate<ResourceLocation> selector, boolean stacks) {
 	}
 
-	private record Listing(Identifier[] ids, long[] signatures) {
+	private record Listing(ResourceLocation[] ids, long[] signatures) {
 		@Override
 		public boolean equals(final Object o) {
 			return o instanceof Listing other && Arrays.equals(this.ids, other.ids) && Arrays.equals(this.signatures, other.signatures);
@@ -209,27 +209,27 @@ public final class InputRecording {
 		}
 
 		@Override
-		public Optional<Resource> getResource(final Identifier location) {
+		public Optional<Resource> getResource(final ResourceLocation location) {
 			this.recording.recordLookup(this.delegate, location);
 			return this.delegate.getResource(location);
 		}
 
 		@Override
-		public List<Resource> getResourceStack(final Identifier location) {
+		public List<Resource> getResourceStack(final ResourceLocation location) {
 			this.recording.recordLookup(this.delegate, location);
 			return this.delegate.getResourceStack(location);
 		}
 
 		@Override
-		public Map<Identifier, Resource> listResources(final String directory, final Predicate<Identifier> selector) {
-			Map<Identifier, Resource> result = this.delegate.listResources(directory, selector);
+		public Map<ResourceLocation, Resource> listResources(final String directory, final Predicate<ResourceLocation> selector) {
+			Map<ResourceLocation, Resource> result = this.delegate.listResources(directory, selector);
 			this.recording.recordListing(this.delegate, directory, selector, false, result.keySet());
 			return result;
 		}
 
 		@Override
-		public Map<Identifier, List<Resource>> listResourceStacks(final String directory, final Predicate<Identifier> selector) {
-			Map<Identifier, List<Resource>> result = this.delegate.listResourceStacks(directory, selector);
+		public Map<ResourceLocation, List<Resource>> listResourceStacks(final String directory, final Predicate<ResourceLocation> selector) {
+			Map<ResourceLocation, List<Resource>> result = this.delegate.listResourceStacks(directory, selector);
 			this.recording.recordListing(this.delegate, directory, selector, true, result.keySet());
 			return result;
 		}

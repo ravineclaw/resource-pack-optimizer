@@ -7,17 +7,17 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.function.BiFunction;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 
 public record DeferredMipmaps(
 	Runnable task, Executor executor, BiFunction<Runnable, Executor, CompletableFuture<Void>> vanilla, CompletableFuture<Void> placeholder
 ) {
 	public void start(
-		final Identifier atlas,
+		final ResourceLocation atlas,
 		final int width,
 		final int height,
 		final int mipLevel,
-		final Map<Identifier, TextureAtlasSprite> regions,
+		final Map<ResourceLocation, TextureAtlasSprite> regions,
 		final boolean matched
 	) {
 		CompletableFuture<Void> work;
@@ -38,7 +38,7 @@ public record DeferredMipmaps(
 	}
 
 	private CompletableFuture<Void> parallel(
-		final Identifier atlas, final int width, final int height, final int mipLevel, final Map<Identifier, TextureAtlasSprite> regions
+		final ResourceLocation atlas, final int width, final int height, final int mipLevel, final Map<ResourceLocation, TextureAtlasSprite> regions
 	) {
 		CompletableFuture<Void> mipmaps;
 		if (mipLevel > 0 && regions.size() > 1) {
