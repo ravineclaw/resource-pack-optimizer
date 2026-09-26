@@ -5,9 +5,10 @@
 	"plugin": "dev.ravineclaw.rpo.mixin.RpoMixinPlugin",
 	"client": [
 		"ColorMapListenerMixin",
+		"CompilationCacheMixin",
+		"CompositePackResourcesAccessor",
 		"FilePackResourcesMixin",
 		"FileResourcesSupplierAccessor",
-		"FixedPathPackResourcesMixin",
 		"FontManagerMixin",
 		"HttpUtilMixin",
 		"LanguageManagerMixin",
@@ -16,12 +17,10 @@
 		"LoadingOverlayMixin",
 		"ModelManagerMixin",
 		"MultiPackResourceManagerMixin",
-		"OverlayedPackResourcesAccessor",
 		"PackMixin",
 		"PathPackResourcesAccessor",
 		"PathResourcesSupplierAccessor",
 		"PendingStitchResultsAccessor",
-		"PostChainCacheMixin",
 		"ReloadableResourceManagerMixin",
 		"ReloadableTextureMixin",
 		"ShaderManagerMixin",
@@ -32,7 +31,8 @@
 		"SpriteLoaderMixin",
 		"TextureAtlasMixin",
 		"TextureAtlasSpriteAccessor",
-		"TextureManagerMixin"
+		"TextureManagerMixin",
+		"VanillaPackResourcesMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

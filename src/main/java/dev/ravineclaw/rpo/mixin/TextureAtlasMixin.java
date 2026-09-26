@@ -1,8 +1,8 @@
 package dev.ravineclaw.rpo.mixin;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.renderpearl.api.commands.CommandEncoder;
-import com.mojang.renderpearl.api.textures.GpuTexture;
+import com.mojang.blaze3d.systems.CommandEncoder;
+import com.mojang.blaze3d.textures.GpuTexture;
 import dev.ravineclaw.rpo.AtlasBuilder;
 import dev.ravineclaw.rpo.AtlasReuse;
 import dev.ravineclaw.rpo.ReloadChanges;

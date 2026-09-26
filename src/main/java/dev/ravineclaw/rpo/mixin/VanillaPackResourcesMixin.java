@@ -10,7 +10,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.resources.Identifier;
-import net.minecraft.server.packs.FixedPathPackResources;
+import net.minecraft.server.packs.VanillaPackResources;
 import net.minecraft.server.packs.PackResources;
 import net.minecraft.server.packs.PackType;
 import net.minecraft.server.packs.resources.IoSupplier;
@@ -23,8 +23,8 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-@Mixin(FixedPathPackResources.class)
-public abstract class FixedPathPackResourcesMixin implements ImmutablePack {
+@Mixin(VanillaPackResources.class)
+public abstract class VanillaPackResourcesMixin implements ImmutablePack {
 	@Unique
 	private static final ThreadLocal<Boolean> RPO_BYPASS = ThreadLocal.withInitial(() -> Boolean.FALSE);
 

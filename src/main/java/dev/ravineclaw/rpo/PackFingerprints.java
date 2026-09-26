@@ -1,6 +1,6 @@
 package dev.ravineclaw.rpo;
 
-import dev.ravineclaw.rpo.mixin.OverlayedPackResourcesAccessor;
+import dev.ravineclaw.rpo.mixin.CompositePackResourcesAccessor;
 import dev.ravineclaw.rpo.mixin.PathPackResourcesAccessor;
 import it.unimi.dsi.fastutil.longs.LongArrayList;
 import java.io.IOException;
@@ -28,8 +28,8 @@ import java.util.zip.ZipFile;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.FilePackResources;
-import net.minecraft.server.packs.FixedPathPackResources;
-import net.minecraft.server.packs.OverlayedPackResources;
+import net.minecraft.server.packs.VanillaPackResources;
+import net.minecraft.server.packs.CompositePackResources;
 import net.minecraft.server.packs.PackResources;
 import net.minecraft.server.packs.PackType;
 import net.minecraft.server.packs.PathPackResources;
@@ -73,13 +73,13 @@ public final class PackFingerprints {
 				return root.getFileSystem() == FileSystems.getDefault() ? new FolderSource(root) : immutable(pack);
 			}
 
-			if (pack instanceof FixedPathPackResources) {
+			if (pack instanceof VanillaPackResources) {
 				return ((ImmutablePack)pack).rpo$isImmutable() ? immutable(pack) : UNKNOWN_SOURCE;
 			}
 
-			if (pack instanceof OverlayedPackResources) {
+			if (pack instanceof CompositePackResources) {
 				List<Source> layers = new ArrayList<>();
-				for (PackResources layer : ((OverlayedPackResourcesAccessor)pack).rpo$getPackResourcesStack()) {
+				for (PackResources layer : ((CompositePackResourcesAccessor)pack).rpo$getPackResourcesStack()) {
 					layers.add(source(layer));
 				}
 

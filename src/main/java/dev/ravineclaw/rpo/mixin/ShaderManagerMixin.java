@@ -2,107 +2,67 @@ package dev.ravineclaw.rpo.mixin;
 
 import dev.ravineclaw.rpo.PostChainReset;
 import dev.ravineclaw.rpo.ResourcePackOptimizer;
-import java.io.IOException;
 import java.lang.reflect.Field;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
 import net.minecraft.client.renderer.ShaderManager;
-import net.minecraft.resources.Identifier;
-import net.minecraft.server.packs.resources.PreparableReloadListener;
-import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
-import net.minecraft.util.Unit;
+import net.minecraft.util.profiling.ProfilerFiller;
 import org.jspecify.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(ShaderManager.class)
 public abstract class ShaderManagerMixin {
 	@Unique
-	private static @Nullable Field rpo$postChainsField;
+	private static @Nullable Field rpo$compilationCacheField;
 
 	@Unique
-	private volatile @Nullable Map<Identifier, String> rpo$lastFingerprint;
-	@Unique
-	private volatile @Nullable Map<Identifier, String> rpo$pendingFingerprint;
-	@Unique
-	private volatile boolean rpo$runVanilla;
+	private ShaderManager.@Nullable Configs rpo$lastConfigs;
 
-	@Inject(method = "reload", at = @At("HEAD"), cancellable = true)
-	private void rpo$skipUnchanged(
-		final PreparableReloadListener.SharedState currentReload,
-		final Executor taskExecutor,
-		final PreparableReloadListener.PreparationBarrier preparationBarrier,
-		final Executor reloadExecutor,
-		final CallbackInfoReturnable<CompletableFuture<Void>> cir
-	) {
-		if (this.rpo$runVanilla) {
-			this.rpo$runVanilla = false;
-			return;
+	@Inject(method = "apply(Lnet/minecraft/client/renderer/ShaderManager$Configs;Lnet/minecraft/server/packs/resources/ResourceManager;Lnet/minecraft/util/profiling/ProfilerFiller;)V", at = @At("HEAD"), cancellable = true)
+	private void rpo$skipUnchanged(final ShaderManager.Configs preparations, final ResourceManager manager, final ProfilerFiller profiler, final CallbackInfo ci) {
+		ShaderManager.Configs last = this.rpo$lastConfigs;
+		this.rpo$lastConfigs = null;
+		boolean same;
+		try {
+			same = last != null && last.equals(preparations);
+		} catch (RuntimeException e) {
+			same = false;
 		}
 
-		ShaderManager self = (ShaderManager)(Object)this;
-		ResourceManager manager = currentReload.resourceManager();
-		cir.setReturnValue(CompletableFuture.supplyAsync(() -> rpo$fingerprint(manager), taskExecutor).thenCompose(fingerprint -> {
-			Map<Identifier, String> last = this.rpo$lastFingerprint;
-			if (fingerprint != null && fingerprint.equals(last)) {
-				return preparationBarrier.wait(Unit.INSTANCE).thenAcceptAsync(unused -> this.rpo$resetPostChains(), reloadExecutor);
-			}
-
-			this.rpo$pendingFingerprint = fingerprint;
-			this.rpo$runVanilla = true;
-			return self.reload(currentReload, taskExecutor, preparationBarrier, reloadExecutor);
-		}));
+		if (same && this.rpo$resetPostChains()) {
+			this.rpo$lastConfigs = last;
+			ci.cancel();
+		}
 	}
 
-	@Inject(method = "apply", at = @At("RETURN"))
-	private void rpo$rememberFingerprint(final CallbackInfo ci) {
-		this.rpo$lastFingerprint = this.rpo$pendingFingerprint;
-		this.rpo$pendingFingerprint = null;
+	@Inject(method = "apply(Lnet/minecraft/client/renderer/ShaderManager$Configs;Lnet/minecraft/server/packs/resources/ResourceManager;Lnet/minecraft/util/profiling/ProfilerFiller;)V", at = @At("RETURN"))
+	private void rpo$rememberConfigs(final ShaderManager.Configs preparations, final ResourceManager manager, final ProfilerFiller profiler, final CallbackInfo ci) {
+		this.rpo$lastConfigs = preparations;
 	}
 
 	@Inject(method = "tryTriggerRecovery", at = @At("HEAD"))
 	private void rpo$forgetOnRecovery(final CallbackInfo ci) {
-		this.rpo$lastFingerprint = null;
+		this.rpo$lastConfigs = null;
 	}
 
 	@Unique
-	private static @Nullable Map<Identifier, String> rpo$fingerprint(final ResourceManager manager) {
+	private boolean rpo$resetPostChains() {
 		try {
-			Map<Identifier, String> contents = new HashMap<>();
-			for (Map.Entry<Identifier, Resource> entry : manager.listResources("shaders", id -> true).entrySet()) {
-				contents.put(entry.getKey(), entry.getValue().readAllAsString());
-			}
-
-			for (Map.Entry<Identifier, Resource> entry : manager.listResources("post_effect", id -> true).entrySet()) {
-				contents.put(entry.getKey(), entry.getValue().readAllAsString());
-			}
-
-			return contents;
-		} catch (IOException | RuntimeException e) {
-			return null;
-		}
-	}
-
-	@Unique
-	private void rpo$resetPostChains() {
-		try {
-			Field field = rpo$postChainsField;
+			Field field = rpo$compilationCacheField;
 			if (field == null) {
-				field = ShaderManager.class.getDeclaredField("postChains");
+				field = ShaderManager.class.getDeclaredField("compilationCache");
 				field.setAccessible(true);
-				rpo$postChainsField = field;
+				rpo$compilationCacheField = field;
 			}
 
 			((PostChainReset)field.get(this)).rpo$reset();
+			return true;
 		} catch (ReflectiveOperationException | RuntimeException e) {
 			ResourcePackOptimizer.LOGGER.warn("Couldn't reset post effect chains", e);
+			return false;
 		}
 	}
 }

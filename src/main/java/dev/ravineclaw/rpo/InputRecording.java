@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.PackResources;
@@ -120,7 +121,7 @@ public final class InputRecording {
 		}
 	}
 
-	void recordListing(final ResourceManager delegate, final String directory, final ResourceManager.Selector selector, final boolean stacks, final Set<Identifier> ids) {
+	void recordListing(final ResourceManager delegate, final String directory, final Predicate<Identifier> selector, final boolean stacks, final Set<Identifier> ids) {
 		if (this.untrackable) {
 			return;
 		}
@@ -184,7 +185,7 @@ public final class InputRecording {
 		return scratch.contains(PackFingerprints.UNKNOWN) ? null : new Listing(sorted, scratch.toLongArray());
 	}
 
-	private record ListingKey(String directory, ResourceManager.Selector selector, boolean stacks) {
+	private record ListingKey(String directory, Predicate<Identifier> selector, boolean stacks) {
 	}
 
 	private record Listing(Identifier[] ids, long[] signatures) {
@@ -220,14 +221,14 @@ public final class InputRecording {
 		}
 
 		@Override
-		public Map<Identifier, Resource> listResources(final String directory, final ResourceManager.Selector selector) {
+		public Map<Identifier, Resource> listResources(final String directory, final Predicate<Identifier> selector) {
 			Map<Identifier, Resource> result = this.delegate.listResources(directory, selector);
 			this.recording.recordListing(this.delegate, directory, selector, false, result.keySet());
 			return result;
 		}
 
 		@Override
-		public Map<Identifier, List<Resource>> listResourceStacks(final String directory, final ResourceManager.Selector selector) {
+		public Map<Identifier, List<Resource>> listResourceStacks(final String directory, final Predicate<Identifier> selector) {
 			Map<Identifier, List<Resource>> result = this.delegate.listResourceStacks(directory, selector);
 			this.recording.recordListing(this.delegate, directory, selector, true, result.keySet());
 			return result;
