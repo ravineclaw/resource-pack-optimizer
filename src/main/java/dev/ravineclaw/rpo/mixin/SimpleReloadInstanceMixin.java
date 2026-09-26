@@ -47,7 +47,7 @@ public abstract class SimpleReloadInstanceMixin {
 
 	@WrapOperation(method = "prepareTasks", at = @At(value = "INVOKE", target = "Ljava/util/List;add(Ljava/lang/Object;)Z"))
 	private boolean rpo$timeApply(
-		final List<Object> steps, final Object step, final Operation<Boolean> original, @Local(name = "listener") final PreparableReloadListener listener
+		final List<Object> steps, final Object step, final Operation<Boolean> original, @Local final PreparableReloadListener listener
 	) {
 		if (ReloadTimeline.ENABLED && step instanceof CompletableFuture<?> future) {
 			ReloadTimeline.track(listener, future);

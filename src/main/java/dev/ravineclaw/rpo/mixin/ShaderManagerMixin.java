@@ -3,6 +3,7 @@ package dev.ravineclaw.rpo.mixin;
 import dev.ravineclaw.rpo.PostChainReset;
 import dev.ravineclaw.rpo.ResourcePackOptimizer;
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import net.minecraft.client.renderer.ShaderManager;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.util.profiling.ProfilerFiller;
@@ -53,7 +54,20 @@ public abstract class ShaderManagerMixin {
 		try {
 			Field field = rpo$compilationCacheField;
 			if (field == null) {
-				field = ShaderManager.class.getDeclaredField("compilationCache");
+				for (Field candidate : ShaderManager.class.getDeclaredFields()) {
+					if (!Modifier.isStatic(candidate.getModifiers()) && PostChainReset.class.isAssignableFrom(candidate.getType())) {
+						if (field != null) {
+							throw new NoSuchFieldException("More than one compilation cache field");
+						}
+
+						field = candidate;
+					}
+				}
+
+				if (field == null) {
+					throw new NoSuchFieldException("No compilation cache field");
+				}
+
 				field.setAccessible(true);
 				rpo$compilationCacheField = field;
 			}

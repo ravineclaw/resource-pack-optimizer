@@ -7,7 +7,7 @@ import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.IntSupplier;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.LoadingOverlay;
 import net.minecraft.server.packs.resources.ReloadInstance;
 import net.minecraft.util.ARGB;
@@ -41,12 +41,12 @@ public abstract class LoadingOverlayMixin {
 	@Shadow
 	private long fadeInStart;
 
-	@ModifyConstant(method = "extractRenderState", constant = @Constant(floatValue = 1000.0F))
+	@ModifyConstant(method = "render", constant = @Constant(floatValue = 1000.0F))
 	private float rpo$noFadeOut(final float original) {
 		return 1.0F;
 	}
 
-	@ModifyConstant(method = "extractRenderState", constant = @Constant(floatValue = 500.0F))
+	@ModifyConstant(method = "render", constant = @Constant(floatValue = 500.0F))
 	private float rpo$noFadeIn(final float original) {
 		return 1.0F;
 	}
@@ -59,8 +59,8 @@ public abstract class LoadingOverlayMixin {
 	@Shadow
 	public abstract void tick();
 
-	@Inject(method = "extractRenderState", at = @At("HEAD"))
-	private void rpo$finishPromptly(final GuiGraphicsExtractor graphics, final int mouseX, final int mouseY, final float a, final CallbackInfo ci) {
+	@Inject(method = "render", at = @At("HEAD"))
+	private void rpo$finishPromptly(final GuiGraphics graphics, final int mouseX, final int mouseY, final float a, final CallbackInfo ci) {
 		if (this.fadeOutStart == -1L && this.fadeInStart != -1L && this.reload.isDone()) {
 			this.tick();
 		}
@@ -75,13 +75,13 @@ public abstract class LoadingOverlayMixin {
 		}
 	}
 
-	@Redirect(method = "extractRenderState", at = @At(value = "INVOKE", target = "Ljava/util/function/IntSupplier;getAsInt()I"))
+	@Redirect(method = "render", at = @At(value = "INVOKE", target = "Ljava/util/function/IntSupplier;getAsInt()I"))
 	private int rpo$blackBackground(final IntSupplier brandBackground) {
 		return ARGB.color(255, 0, 0, 0);
 	}
 
-	@Inject(method = "extractRenderState", at = @At("HEAD"), cancellable = true)
-	private void rpo$inGameReload(final GuiGraphicsExtractor graphics, final int mouseX, final int mouseY, final float a, final CallbackInfo ci) {
+	@Inject(method = "render", at = @At("HEAD"), cancellable = true)
+	private void rpo$inGameReload(final GuiGraphics graphics, final int mouseX, final int mouseY, final float a, final CallbackInfo ci) {
 		if (!this.fadeIn) {
 			return;
 		}
@@ -92,18 +92,18 @@ public abstract class LoadingOverlayMixin {
 		}
 
 		if (this.fadeOutStart > -1L) {
-			this.minecraft.gui.setOverlay(null);
-			if (this.minecraft.gui.screen() != null) {
-				this.minecraft.gui.screen().extractRenderStateWithTooltipAndSubtitles(graphics, mouseX, mouseY, a);
+			this.minecraft.setOverlay(null);
+			if (this.minecraft.screen != null) {
+				this.minecraft.screen.renderWithTooltipAndSubtitles(graphics, mouseX, mouseY, a);
 			}
 
 			return;
 		}
 
-		if (this.minecraft.gui.screen() != null) {
-			this.minecraft.gui.screen().extractRenderStateWithTooltipAndSubtitles(graphics, mouseX, mouseY, a);
+		if (this.minecraft.screen != null) {
+			this.minecraft.screen.renderWithTooltipAndSubtitles(graphics, mouseX, mouseY, a);
 		} else {
-			this.minecraft.gui.hud.extractDeferredSubtitles();
+			this.minecraft.gui.renderDeferredSubtitles();
 		}
 
 		graphics.nextStratum();

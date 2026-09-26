@@ -5,7 +5,7 @@ import java.util.Collection;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import net.minecraft.client.renderer.texture.SpriteLoader;
-import net.minecraft.client.resources.model.sprite.AtlasManager;
+import net.minecraft.client.resources.model.AtlasManager;
 import net.minecraft.server.packs.resources.PreparableReloadListener;
 import org.jspecify.annotations.Nullable;
 

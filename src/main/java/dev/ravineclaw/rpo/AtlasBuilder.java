@@ -123,7 +123,7 @@ public final class AtlasBuilder {
 		int alignment = 1 << mipLevel;
 		List<TextureAtlasSprite> result = new ArrayList<>(regions.size());
 		for (TextureAtlasSprite sprite : regions.values()) {
-			if (sprite.isAnimated()) {
+			if (sprite.contents().isAnimated()) {
 				continue;
 			}
 

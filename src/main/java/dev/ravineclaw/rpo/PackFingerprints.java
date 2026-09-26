@@ -9,6 +9,7 @@ import java.io.UncheckedIOException;
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.nio.file.FileSystems;
 import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
@@ -134,11 +135,49 @@ public final class PackFingerprints {
 		static Source of(final PackResources pack) {
 			try {
 				if (getOrCreate == null) {
-					Field access = FilePackResources.class.getDeclaredField("zipFileAccess");
+					Field access = null;
+					Field prefix = null;
+					for (Field field : FilePackResources.class.getDeclaredFields()) {
+						if (Modifier.isStatic(field.getModifiers())) {
+							continue;
+						}
+
+						if (field.getType() == String.class) {
+							if (prefix != null) {
+								throw new NoSuchFieldException("More than one prefix field");
+							}
+
+							prefix = field;
+						} else if (field.getType().getDeclaringClass() == FilePackResources.class) {
+							if (access != null) {
+								throw new NoSuchFieldException("More than one zip access field");
+							}
+
+							access = field;
+						}
+					}
+
+					if (access == null || prefix == null) {
+						throw new NoSuchFieldException("Zip access or prefix field not found");
+					}
+
+					Method method = null;
+					for (Method candidate : access.getType().getDeclaredMethods()) {
+						if (!Modifier.isStatic(candidate.getModifiers()) && candidate.getParameterCount() == 0 && candidate.getReturnType() == ZipFile.class) {
+							if (method != null) {
+								throw new NoSuchMethodException("More than one zip file getter");
+							}
+
+							method = candidate;
+						}
+					}
+
+					if (method == null) {
+						throw new NoSuchMethodException("Zip file getter not found");
+					}
+
 					access.setAccessible(true);
-					Field prefix = FilePackResources.class.getDeclaredField("prefix");
 					prefix.setAccessible(true);
-					Method method = access.getType().getDeclaredMethod("getOrCreateZipFile");
 					method.setAccessible(true);
 					accessField = access;
 					prefixField = prefix;

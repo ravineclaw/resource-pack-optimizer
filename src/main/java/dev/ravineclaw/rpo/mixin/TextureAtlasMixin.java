@@ -1,7 +1,10 @@
 package dev.ravineclaw.rpo.mixin;
 
-import com.mojang.blaze3d.systems.RenderSystem;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.CommandEncoder;
+import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuTexture;
 import dev.ravineclaw.rpo.AtlasBuilder;
 import dev.ravineclaw.rpo.AtlasReuse;
@@ -34,6 +37,8 @@ public abstract class TextureAtlasMixin {
 
 	@Unique
 	private AtlasBuilder.@Nullable Built rpo$prebuilt;
+	@Unique
+	private boolean rpo$recreating;
 
 	@Shadow
 	protected abstract void uploadAnimationFrames();
@@ -59,9 +64,21 @@ public abstract class TextureAtlasMixin {
 		AtlasReuse.uploadFinished(this.location, preparations);
 	}
 
+	@WrapOperation(method = "createTexture", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/texture/TextureAtlas;close()V"))
+	private void rpo$recreate(final TextureAtlas atlas, final Operation<Void> original) {
+		this.rpo$recreating = true;
+		try {
+			original.call(atlas);
+		} finally {
+			this.rpo$recreating = false;
+		}
+	}
+
 	@Inject(method = "close", at = @At("HEAD"))
 	private void rpo$forget(final CallbackInfo ci) {
-		AtlasReuse.forget(this.location);
+		if (!this.rpo$recreating) {
+			AtlasReuse.forget(this.location);
+		}
 	}
 
 	@Inject(method = "uploadInitialContents", at = @At("HEAD"), cancellable = true)
@@ -88,7 +105,7 @@ public abstract class TextureAtlasMixin {
 			CommandEncoder encoder = RenderSystem.getDevice().createCommandEncoder();
 			for (int level = 0; level < levels.length; level++) {
 				for (AtlasBuilder.Tile tile : levels[level].tiles()) {
-					encoder.writeToTexture(texture, tile.pixels(), level, 0, tile.x(), tile.y(), tile.width(), tile.height());
+					encoder.writeToTexture(texture, tile.pixels(), NativeImage.Format.RGBA, level, 0, tile.x(), tile.y(), tile.width(), tile.height());
 				}
 			}
 

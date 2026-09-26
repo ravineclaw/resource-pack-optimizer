@@ -59,6 +59,7 @@ public abstract class LanguageManagerMixin implements PreparableReloadListener {
 				}
 
 				this.languages = prepared.languages();
+				I18nInvoker.rpo$setLanguage(prepared.language());
 				Language.inject(prepared.language());
 				this.reloadCallback.accept(prepared.language());
 			}, reloadExecutor);
