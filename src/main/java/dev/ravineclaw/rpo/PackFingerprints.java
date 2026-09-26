@@ -27,12 +27,12 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.resources.Identifier;
-import net.minecraft.server.packs.FilePackResources;
-import net.minecraft.server.packs.VanillaPackResources;
 import net.minecraft.server.packs.CompositePackResources;
+import net.minecraft.server.packs.FilePackResources;
 import net.minecraft.server.packs.PackResources;
 import net.minecraft.server.packs.PackType;
 import net.minecraft.server.packs.PathPackResources;
+import net.minecraft.server.packs.VanillaPackResources;
 
 public final class PackFingerprints {
 	public static final long ABSENT = -1L;
