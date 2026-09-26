@@ -11,6 +11,7 @@ import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.gui.screens.worldselection.SelectWorldScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.packs.repository.PackRepository;
+import net.minecraft.server.packs.resources.ReloadableResourceManager;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.GameType;
@@ -35,7 +36,7 @@ public final class SelfTest {
 			return;
 		}
 
-		Configurator.setLevel("net.minecraft.server.packs.resources.ReloadableResourceManager", Level.DEBUG);
+		Configurator.setLevel(ReloadableResourceManager.class.getName(), Level.DEBUG);
 		Thread thread = new Thread(SelfTest::run, "RPO self-test");
 		thread.setDaemon(true);
 		thread.start();
