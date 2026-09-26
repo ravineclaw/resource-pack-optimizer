@@ -44,7 +44,7 @@ public final class SelfTest {
 		try {
 			long start = System.nanoTime();
 			Minecraft minecraft = waitFor(Minecraft::getInstance);
-			waitUntil(minecraft, () -> minecraft.getOverlay() == null && minecraft.screen instanceof TitleScreen);
+			waitUntil(minecraft, () -> minecraft.getOverlay() == null && BackgroundReload.current() == null && minecraft.screen instanceof TitleScreen);
 			log("startup until title screen: {} ms", (System.nanoTime() - start) / 1_000_000L);
 
 			if (!Boolean.getBoolean("rpo.disable")) {
@@ -94,7 +94,7 @@ public final class SelfTest {
 					.createFreshLevel(WORLD, settings, SelectWorldScreen.TEST_OPTIONS, WorldPresets::createNormalWorldDimensions, new TitleScreen());
 			}
 		}, minecraft).join();
-		waitUntil(minecraft, () -> minecraft.level != null && minecraft.player != null && minecraft.screen == null && minecraft.getOverlay() == null);
+		waitUntil(minecraft, () -> minecraft.level != null && minecraft.player != null && minecraft.screen == null && minecraft.getOverlay() == null && BackgroundReload.current() == null);
 		waitForChunks(minecraft, 180_000L);
 		log("world open with all chunks built: {} ms ({} sections)", (System.nanoTime() - start) / 1_000_000L, sections(minecraft));
 
@@ -139,8 +139,15 @@ public final class SelfTest {
 
 	private static void reload(final Minecraft minecraft, final String label, final boolean waitForChunks) throws InterruptedException {
 		long start = System.nanoTime();
-		CompletableFuture.runAsync(minecraft::reloadResourcePacks, minecraft).join();
-		waitUntil(minecraft, () -> minecraft.getOverlay() == null);
+		boolean blocking = CompletableFuture.supplyAsync(() -> {
+			minecraft.reloadResourcePacks();
+			return minecraft.getOverlay() != null;
+		}, minecraft).join();
+		if (blocking) {
+			log("{}: reload shows a blocking overlay", label);
+		}
+
+		waitUntil(minecraft, () -> minecraft.getOverlay() == null && BackgroundReload.current() == null);
 		long overlay = (System.nanoTime() - start) / 1_000_000L;
 		ReloadTimeline.log(label);
 		if (!waitForChunks) {
