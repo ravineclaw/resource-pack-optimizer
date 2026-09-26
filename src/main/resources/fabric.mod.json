@@ -8,6 +8,7 @@
 		"ravineclaw"
 	],
 	"license": "MIT",
+	"icon": "assets/resource_pack_optimizer/icon.png",
 	"environment": "client",
 	"entrypoints": {
 		"client": [
