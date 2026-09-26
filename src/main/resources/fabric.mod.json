@@ -3,7 +3,7 @@
 	"id": "resource_pack_optimizer",
 	"version": "${version}",
 	"name": "Resource Pack Optimizer",
-	"description": "Makes resource pack reloads near-instant: removes the forced loading-screen delays, indexes pack zips, caches vanilla lookups and pack metadata, parallelizes mipmaps, builds atlases off-thread, keeps atlases, models, fonts, textures, shaders and chunks that did not change, and avoids needless full reloads.",
+	"description": "Makes resource pack reloads much faster and lets you keep playing while they load.",
 	"authors": [
 		"ravineclaw"
 	],
