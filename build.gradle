@@ -19,6 +19,22 @@ loom {
 					vmArg "-Drpo.selftest.world=true"
 				}
 			}
+			if (project.hasProperty("rpoBench")) {
+				vmArg "-Drpo.bench=${project.findProperty('rpoBench')}"
+				vmArg "-Drpo.bench.runs=${project.findProperty('rpoRuns') ?: '5'}"
+				if (project.hasProperty("rpoShow")) {
+					vmArg "-Drpo.bench.show=true"
+				}
+				if (project.hasProperty("rpoScout")) {
+					vmArg "-Drpo.bench.scout=true"
+				}
+				if (project.hasProperty("rpoRejoin")) {
+					vmArg "-Drpo.bench.rejoin=true"
+				}
+				if (project.hasProperty("rpoPos")) {
+					vmArg "-Drpo.bench.pos=${project.findProperty('rpoPos')}"
+				}
+			}
 			if (project.hasProperty("rpoJfr")) {
 				vmArg "-XX:StartFlightRecording=filename=${project.findProperty('rpoJfr')},settings=profile"
 			}
