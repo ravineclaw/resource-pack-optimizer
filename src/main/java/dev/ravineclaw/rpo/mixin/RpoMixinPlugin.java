@@ -1,5 +1,6 @@
 package dev.ravineclaw.rpo.mixin;
 
+import dev.ravineclaw.rpo.RpoSettings;
 import java.util.List;
 import java.util.Set;
 import org.objectweb.asm.tree.ClassNode;
@@ -7,7 +8,7 @@ import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 
 public class RpoMixinPlugin implements IMixinConfigPlugin {
-	private static final boolean DISABLED = Boolean.getBoolean("rpo.disable");
+	private static final boolean DISABLED = RpoSettings.disabledThisSession();
 
 	@Override
 	public void onLoad(final String mixinPackage) {
