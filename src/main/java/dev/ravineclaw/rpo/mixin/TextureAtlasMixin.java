@@ -8,8 +8,17 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuTexture;
 import dev.ravineclaw.rpo.AtlasBuilder;
 import dev.ravineclaw.rpo.AtlasReuse;
+import dev.ravineclaw.rpo.AtlasStaging;
+import dev.ravineclaw.rpo.FramePump;
 import dev.ravineclaw.rpo.ReloadChanges;
 import dev.ravineclaw.rpo.ResourcePackOptimizer;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import net.minecraft.SharedConstants;
+import net.minecraft.client.renderer.texture.AbstractTexture;
+import net.minecraft.client.renderer.texture.MissingTextureAtlasSprite;
+import net.minecraft.client.renderer.texture.SpriteContents;
 import net.minecraft.client.renderer.texture.SpriteLoader;
 import net.minecraft.client.renderer.texture.TextureAtlas;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
@@ -24,10 +33,25 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(TextureAtlas.class)
-public abstract class TextureAtlasMixin {
+public abstract class TextureAtlasMixin extends AbstractTexture {
 	@Shadow
 	@Final
 	private ResourceLocation location;
+	@Shadow
+	private List<SpriteContents> sprites;
+	@Shadow
+	private List<TextureAtlasSprite.Ticker> animatedTextures;
+	@Shadow
+	private Map<ResourceLocation, TextureAtlasSprite> texturesByName;
+	@Shadow
+	@Nullable
+	private TextureAtlasSprite missingSprite;
+	@Shadow
+	private int width;
+	@Shadow
+	private int height;
+	@Shadow
+	private int mipLevel;
 
 	@Unique
 	private AtlasBuilder.@Nullable Built rpo$prebuilt;
@@ -47,6 +71,20 @@ public abstract class TextureAtlasMixin {
 		AtlasReuse.uploadStarted(this.location);
 		this.rpo$uploading = true;
 		this.rpo$releasePrebuilt();
+		AtlasStaging.Staged staged = AtlasStaging.take(
+			this.location, preparations.regions(), preparations.width(), preparations.height(), preparations.mipLevel()
+		);
+		if (staged != null) {
+			if (this.rpo$swapIn(staged, preparations)) {
+				this.rpo$uploading = false;
+				AtlasReuse.uploadFinished(this.location, preparations);
+				ci.cancel();
+				return;
+			}
+
+			AtlasStaging.release(staged);
+		}
+
 		AtlasBuilder.Built built = AtlasBuilder.take(this.location, preparations.regions());
 		if (built != null && !rpo$matches(built, preparations)) {
 			built.close();
@@ -54,6 +92,44 @@ public abstract class TextureAtlasMixin {
 		}
 
 		this.rpo$prebuilt = built;
+	}
+
+	@Unique
+	private boolean rpo$swapIn(final AtlasStaging.Staged staged, final SpriteLoader.Preparations preparations) {
+		Map<ResourceLocation, TextureAtlasSprite> byName = Map.copyOf(preparations.regions());
+		TextureAtlasSprite missing = byName.get(MissingTextureAtlasSprite.getLocation());
+		if (missing == null || SharedConstants.DEBUG_DUMP_TEXTURE_ATLAS) {
+			return false;
+		}
+
+		List<SpriteContents> contents = new ArrayList<>();
+		List<TextureAtlasSprite.Ticker> tickers = new ArrayList<>();
+		for (TextureAtlasSprite sprite : preparations.regions().values()) {
+			contents.add(sprite.contents());
+			TextureAtlasSprite.Ticker ticker = sprite.createTicker();
+			if (ticker != null) {
+				tickers.add(ticker);
+			}
+		}
+
+		List<AutoCloseable> old = new ArrayList<>(this.sprites);
+		old.addAll(this.animatedTextures);
+
+		if (this.texture != null) {
+			old.add(this.texture);
+		}
+
+		this.texture = staged.texture();
+		this.width = preparations.width();
+		this.height = preparations.height();
+		this.mipLevel = preparations.mipLevel();
+		this.setFilter(false, this.mipLevel > 1);
+		this.texturesByName = byName;
+		this.missingSprite = missing;
+		this.sprites = List.copyOf(contents);
+		this.animatedTextures = List.copyOf(tickers);
+		FramePump.closeLater(old);
+		return true;
 	}
 
 	@Unique
@@ -127,6 +203,7 @@ public abstract class TextureAtlasMixin {
 	private void rpo$forget(final CallbackInfo ci) {
 		if (!this.rpo$uploading) {
 			AtlasReuse.forget(this.location);
+			AtlasStaging.discard(this.location);
 		}
 	}
 }
