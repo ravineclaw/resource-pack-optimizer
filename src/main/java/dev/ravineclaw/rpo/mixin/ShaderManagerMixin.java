@@ -2,6 +2,7 @@ package dev.ravineclaw.rpo.mixin;
 
 import dev.ravineclaw.rpo.PostChainReset;
 import dev.ravineclaw.rpo.ResourcePackOptimizer;
+import dev.ravineclaw.rpo.RpoSettings;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.util.HashMap;
@@ -44,6 +45,12 @@ public abstract class ShaderManagerMixin {
 	) {
 		if (this.rpo$runVanilla) {
 			this.rpo$runVanilla = false;
+			return;
+		}
+
+		if (!RpoSettings.active()) {
+			this.rpo$lastFingerprint = null;
+			this.rpo$pendingFingerprint = null;
 			return;
 		}
 

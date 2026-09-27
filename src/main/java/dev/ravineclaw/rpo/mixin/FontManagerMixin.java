@@ -6,6 +6,7 @@ import dev.ravineclaw.rpo.GlyphCacheReset;
 import dev.ravineclaw.rpo.InputRecording;
 import dev.ravineclaw.rpo.ListenerReuse;
 import dev.ravineclaw.rpo.ReuseGuard;
+import dev.ravineclaw.rpo.RpoSettings;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
@@ -56,7 +57,7 @@ public abstract class FontManagerMixin {
 		}
 
 		ResourceManager manager = currentReload.resourceManager();
-		if (!InputRecording.isTrackable(manager) || !ReuseGuard.untouched("fonts", ReuseGuard.FONTS)) {
+		if (!RpoSettings.active() || !InputRecording.isTrackable(manager) || !ReuseGuard.untouched("fonts", ReuseGuard.FONTS)) {
 			this.rpo$applied = null;
 			this.rpo$pending = null;
 			return;

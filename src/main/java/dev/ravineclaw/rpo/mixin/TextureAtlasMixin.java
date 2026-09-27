@@ -13,6 +13,7 @@ import dev.ravineclaw.rpo.AtlasStaging;
 import dev.ravineclaw.rpo.FramePump;
 import dev.ravineclaw.rpo.ReloadChanges;
 import dev.ravineclaw.rpo.ResourcePackOptimizer;
+import dev.ravineclaw.rpo.RpoSettings;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -67,6 +68,16 @@ public abstract class TextureAtlasMixin extends AbstractTexture {
 
 	@Inject(method = "upload", at = @At("HEAD"), cancellable = true)
 	private void rpo$takePrebuilt(final SpriteLoader.Preparations preparations, final CallbackInfo ci) {
+		if (this.rpo$prebuilt != null) {
+			this.rpo$prebuilt.close();
+			this.rpo$prebuilt = null;
+		}
+
+		if (!RpoSettings.active()) {
+			AtlasReuse.forget(this.location);
+			return;
+		}
+
 		if (AtlasReuse.isUploaded(this.location, preparations)) {
 			ReloadChanges.unchanged("atlas:" + this.location);
 			ci.cancel();
@@ -74,10 +85,6 @@ public abstract class TextureAtlasMixin extends AbstractTexture {
 		}
 
 		AtlasReuse.uploadStarted(this.location);
-		if (this.rpo$prebuilt != null) {
-			this.rpo$prebuilt.close();
-			this.rpo$prebuilt = null;
-		}
 
 		AtlasStaging.Staged staged = AtlasStaging.take(this.location, preparations);
 		if (staged != null) {
@@ -135,7 +142,9 @@ public abstract class TextureAtlasMixin extends AbstractTexture {
 
 	@Inject(method = "upload", at = @At("RETURN"))
 	private void rpo$rememberUpload(final SpriteLoader.Preparations preparations, final CallbackInfo ci) {
-		AtlasReuse.uploadFinished(this.location, preparations);
+		if (RpoSettings.active()) {
+			AtlasReuse.uploadFinished(this.location, preparations);
+		}
 	}
 
 	@Inject(method = "close", at = @At("HEAD"))

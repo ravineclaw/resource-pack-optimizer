@@ -1,5 +1,6 @@
 package dev.ravineclaw.rpo.mixin;
 
+import dev.ravineclaw.rpo.RpoSettings;
 import dev.ravineclaw.rpo.ZipIndex;
 import java.util.Enumeration;
 import java.util.zip.ZipEntry;
@@ -23,12 +24,20 @@ public abstract class FilePackResourcesMixin {
 	private Enumeration<? extends ZipEntry> rpo$indexedListEntries(
 		final ZipFile zipFile, final PackType type, final String namespace, final String directory, final PackResources.ResourceOutput output
 	) {
+		if (!RpoSettings.active()) {
+			return zipFile.entries();
+		}
+
 		String prefix = this.addPrefix(type.getDirectory() + "/" + namespace + "/") + directory + "/";
 		return ZipIndex.of(zipFile).entriesWithPrefix(prefix);
 	}
 
 	@Redirect(method = "getNamespaces", at = @At(value = "INVOKE", target = "Ljava/util/zip/ZipFile;entries()Ljava/util/Enumeration;"))
 	private Enumeration<? extends ZipEntry> rpo$indexedNamespaceEntries(final ZipFile zipFile, final PackType type) {
+		if (!RpoSettings.active()) {
+			return zipFile.entries();
+		}
+
 		return ZipIndex.of(zipFile).entriesWithPrefix(this.addPrefix(type.getDirectory() + "/"));
 	}
 }
