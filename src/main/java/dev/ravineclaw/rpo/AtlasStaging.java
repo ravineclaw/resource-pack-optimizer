@@ -6,6 +6,7 @@ import com.mojang.renderpearl.api.buffers.GpuBuffer;
 import com.mojang.renderpearl.api.commands.CommandEncoder;
 import com.mojang.renderpearl.api.commands.RenderPass;
 import com.mojang.renderpearl.api.device.GpuDevice;
+import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import com.mojang.renderpearl.api.textures.GpuTexture;
 import com.mojang.renderpearl.api.textures.GpuTextureView;
 import java.nio.ByteBuffer;
@@ -16,6 +17,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.texture.SpriteContents;
 import net.minecraft.client.renderer.texture.SpriteLoader;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
@@ -26,6 +28,7 @@ import org.lwjgl.system.MemoryUtil;
 
 public final class AtlasStaging {
 	private static final Map<Identifier, Staged> STAGED = new HashMap<>();
+	private static final List<RenderPipeline> ANIMATION_PIPELINES = List.of(RenderPipelines.ANIMATE_SPRITE_BLIT, RenderPipelines.ANIMATE_SPRITE_INTERPOLATE);
 
 	private AtlasStaging() {
 	}
@@ -131,6 +134,16 @@ public final class AtlasStaging {
 		return staged;
 	}
 
+	private static boolean animationShadersLoaded() {
+		for (RenderPipeline pipeline : ANIMATION_PIPELINES) {
+			if (RenderSystem.getCompiledPipelineNullable(pipeline) == null) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
 	public static void discard(final Identifier atlas) {
 		Staged staged;
 		synchronized (STAGED) {
@@ -206,6 +219,10 @@ public final class AtlasStaging {
 		}
 
 		private boolean create() {
+			if (!animationShadersLoaded()) {
+				return false;
+			}
+
 			this.built = AtlasBuilder.take(this.atlas, this.regions);
 			if (this.built == null) {
 				return false;
