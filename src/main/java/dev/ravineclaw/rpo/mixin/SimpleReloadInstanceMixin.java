@@ -7,12 +7,14 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import net.minecraft.server.packs.resources.PreparableReloadListener;
+import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.SimpleReloadInstance;
 import org.jspecify.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(SimpleReloadInstance.class)
@@ -59,5 +61,23 @@ public abstract class SimpleReloadInstanceMixin {
 		}
 
 		return original.call(steps, step);
+	}
+
+	@ModifyArg(
+		method = "prepareTasks",
+		at = @At(
+			value = "INVOKE",
+			target = "Lnet/minecraft/server/packs/resources/SimpleReloadInstance$StateFactory;create(Lnet/minecraft/server/packs/resources/PreparableReloadListener$PreparationBarrier;Lnet/minecraft/server/packs/resources/ResourceManager;Lnet/minecraft/server/packs/resources/PreparableReloadListener;Ljava/util/concurrent/Executor;Ljava/util/concurrent/Executor;)Ljava/util/concurrent/CompletableFuture;"
+		),
+		index = 4
+	)
+	private Executor rpo$timeMainThread(
+		final PreparableReloadListener.PreparationBarrier barrier,
+		final ResourceManager resourceManager,
+		final PreparableReloadListener listener,
+		final Executor taskExecutor,
+		final Executor reloadExecutor
+	) {
+		return ReloadTimeline.ENABLED ? ReloadTimeline.timedMainThread(listener, reloadExecutor) : reloadExecutor;
 	}
 }

@@ -4,6 +4,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
 import dev.ravineclaw.rpo.BackgroundReload;
+import dev.ravineclaw.rpo.FramePump;
 import dev.ravineclaw.rpo.ReloadTimeline;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.LoadingOverlay;
@@ -42,5 +43,10 @@ public abstract class MinecraftMixin {
 		if (ReloadTimeline.ENABLED) {
 			ReloadTimeline.frame();
 		}
+	}
+
+	@Inject(method = "runTick", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/Minecraft;runAllTasks()V"))
+	private void rpo$pumpFrameWork(final CallbackInfo ci) {
+		FramePump.pump();
 	}
 }
