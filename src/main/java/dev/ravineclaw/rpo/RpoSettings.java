@@ -49,6 +49,7 @@ public final class RpoSettings {
 			AtlasBuilder.clear();
 			AtlasStaging.discardAll();
 			SpriteCache.clear();
+			SpirvCache.clear();
 			SpriteDiskCache.deleteLater();
 		}
 	}

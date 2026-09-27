@@ -13,6 +13,8 @@
 		"FontAccessor",
 		"FontManagerMixin",
 		"GameRendererReloadMixin",
+		"GlslCompilerMixin",
+		"GuiMixin",
 		"HttpUtilMixin",
 		"I18nInvoker",
 		"LanguageManagerMixin",
