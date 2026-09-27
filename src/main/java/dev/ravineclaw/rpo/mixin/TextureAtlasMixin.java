@@ -120,7 +120,7 @@ public abstract class TextureAtlasMixin extends AbstractTexture {
 		this.width = preparations.width();
 		this.height = preparations.height();
 		this.mipLevel = preparations.mipLevel();
-		this.setFilter(false, this.mipLevel > 1);
+		this.setFilter(false, this.mipLevel > 0);
 		this.texturesByName = byName;
 		this.missingSprite = missing;
 		this.sprites = List.copyOf(contents);
