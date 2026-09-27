@@ -9,8 +9,8 @@ public class ResourcePackOptimizer implements ClientModInitializer {
 
 	@Override
 	public void onInitializeClient() {
-		if (Boolean.getBoolean("rpo.disable")) {
-			LOGGER.info("Resource Pack Optimizer is disabled by -Drpo.disable=true");
+		if (RpoSettings.disabledThisSession()) {
+			LOGGER.info("Resource Pack Optimizer is turned off for this session");
 		}
 
 		SelfTest.startIfRequested();
