@@ -94,7 +94,7 @@ public final class AtlasBuilder {
 				Built built = new Built(regions, covered, levels);
 				if (!ok) {
 					built.close();
-					return null;
+					return Boolean.FALSE;
 				}
 
 				synchronized (PENDING) {
@@ -104,8 +104,8 @@ public final class AtlasBuilder {
 					}
 				}
 
-				return null;
-			});
+				return Boolean.TRUE;
+			}).thenCompose(ok -> ok ? AtlasStaging.stage(atlas, regions, width, height, mipLevel, executor) : CompletableFuture.completedFuture(null));
 		}, executor);
 	}
 
