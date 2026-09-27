@@ -48,8 +48,9 @@ public final class SelfTest {
 			Minecraft minecraft = waitFor(Minecraft::getInstance);
 			waitUntil(minecraft, () -> minecraft.getOverlay() == null && BackgroundReload.current() == null && minecraft.screen instanceof TitleScreen);
 			log("startup until title screen: {} ms", (System.nanoTime() - start) / 1_000_000L);
+			ReloadTimeline.log("startup reload");
 
-			if (!RpoSettings.disabledThisSession()) {
+			if (!RpoSettings.mixinsDisabled()) {
 				CompletableFuture.runAsync(() -> MixinEnvironment.getCurrentEnvironment().audit(), minecraft).join();
 				log("mixin audit passed");
 			}
@@ -63,6 +64,18 @@ public final class SelfTest {
 			}
 
 			String tag = System.getProperty("rpo.selftest.tag", "run");
+			if (!RpoSettings.mixinsDisabled()) {
+				boolean inWorld = minecraft.level != null;
+				RpoSettings.request(false);
+				reload(minecraft, "turned off", inWorld);
+				Path offDir = minecraft.gameDirectory.toPath().resolve("rpo-dump").resolve(tag + "-off");
+				CompletableFuture.runAsync(() -> minecraft.getTextureManager().dumpAllSheets(offDir), minecraft).join();
+				log("dumped atlases with the mod turned off to {}", offDir);
+				RpoSettings.request(true);
+				reload(minecraft, "turned on again", inWorld);
+				reload(minecraft, "reload after turning on", inWorld);
+			}
+
 			Path dumpDir = minecraft.gameDirectory.toPath().resolve("rpo-dump").resolve(tag);
 			CompletableFuture.runAsync(() -> minecraft.getTextureManager().dumpAllSheets(dumpDir), minecraft).join();
 			log("dumped atlases to {}", dumpDir);

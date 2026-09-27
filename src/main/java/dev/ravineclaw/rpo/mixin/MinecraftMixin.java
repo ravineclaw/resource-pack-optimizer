@@ -6,6 +6,7 @@ import com.llamalad7.mixinextras.sugar.Local;
 import dev.ravineclaw.rpo.BackgroundReload;
 import dev.ravineclaw.rpo.FramePump;
 import dev.ravineclaw.rpo.ReloadTimeline;
+import dev.ravineclaw.rpo.RpoSettings;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.LoadingOverlay;
 import net.minecraft.client.gui.screens.Overlay;
@@ -23,7 +24,7 @@ public abstract class MinecraftMixin {
 	)
 	private void rpo$reloadInBackground(final Minecraft minecraft, final Overlay overlay, final Operation<Void> original, @Local(argsOnly = true) final boolean isRecovery) {
 		BackgroundReload.clear();
-		if (!isRecovery && overlay instanceof LoadingOverlay loading) {
+		if (!isRecovery && RpoSettings.active() && overlay instanceof LoadingOverlay loading) {
 			BackgroundReload.start(loading);
 		} else {
 			original.call(minecraft, overlay);

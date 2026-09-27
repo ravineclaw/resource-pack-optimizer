@@ -6,6 +6,7 @@ import dev.ravineclaw.rpo.InputRecording;
 import dev.ravineclaw.rpo.ListenerReuse;
 import dev.ravineclaw.rpo.ReloadChanges;
 import dev.ravineclaw.rpo.ReuseGuard;
+import dev.ravineclaw.rpo.RpoSettings;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import net.minecraft.client.resources.model.ModelManager;
@@ -43,7 +44,7 @@ public abstract class ModelManagerMixin {
 		}
 
 		ResourceManager manager = currentReload.resourceManager();
-		if (!InputRecording.isTrackable(manager) || !ReuseGuard.untouched("models", ReuseGuard.MODELS)) {
+		if (!RpoSettings.active() || !InputRecording.isTrackable(manager) || !ReuseGuard.untouched("models", ReuseGuard.MODELS)) {
 			this.rpo$applied = null;
 			this.rpo$pending = null;
 			return;

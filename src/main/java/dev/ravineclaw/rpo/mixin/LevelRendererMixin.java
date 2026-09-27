@@ -3,6 +3,7 @@ package dev.ravineclaw.rpo.mixin;
 import dev.ravineclaw.rpo.ReloadChanges;
 import dev.ravineclaw.rpo.ResourcePackOptimizer;
 import dev.ravineclaw.rpo.ReuseGuard;
+import dev.ravineclaw.rpo.RpoSettings;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.ViewArea;
 import net.minecraft.client.renderer.chunk.SectionRenderDispatcher;
@@ -22,7 +23,8 @@ public abstract class LevelRendererMixin {
 
 	@Inject(method = "allChanged", at = @At("HEAD"), cancellable = true)
 	private void rpo$skipUnneededRebuild(final CallbackInfo ci) {
-		if (this.viewArea != null
+		if (RpoSettings.active()
+			&& this.viewArea != null
 			&& this.sectionRenderDispatcher != null
 			&& ReloadChanges.isFinishingReload()
 			&& ReloadChanges.meshInputsUnchanged()

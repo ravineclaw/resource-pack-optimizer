@@ -2,6 +2,7 @@ package dev.ravineclaw.rpo.mixin;
 
 import dev.ravineclaw.rpo.PostChainReset;
 import dev.ravineclaw.rpo.ResourcePackOptimizer;
+import dev.ravineclaw.rpo.RpoSettings;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import net.minecraft.client.renderer.ShaderManager;
@@ -31,6 +32,11 @@ public abstract class ShaderManagerMixin {
 			same = last != null && last.equals(preparations);
 		} catch (RuntimeException e) {
 			same = false;
+		}
+
+		if (!RpoSettings.active()) {
+			this.rpo$lastConfigs = null;
+			return;
 		}
 
 		if (same && this.rpo$resetPostChains()) {

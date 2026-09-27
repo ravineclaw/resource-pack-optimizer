@@ -1,5 +1,6 @@
 package dev.ravineclaw.rpo.mixin;
 
+import dev.ravineclaw.rpo.RpoSettings;
 import dev.ravineclaw.rpo.SoftSoundReload;
 import net.minecraft.client.sounds.SoundEngine;
 import net.minecraft.client.sounds.SoundManager;
@@ -14,6 +15,10 @@ public abstract class SoundManagerMixin {
 		at = @At(value = "INVOKE", target = "Lnet/minecraft/client/sounds/SoundEngine;reload()V")
 	)
 	private void rpo$softReload(final SoundEngine engine) {
-		((SoftSoundReload)engine).rpo$softReload();
+		if (RpoSettings.active()) {
+			((SoftSoundReload)engine).rpo$softReload();
+		} else {
+			engine.reload();
+		}
 	}
 }

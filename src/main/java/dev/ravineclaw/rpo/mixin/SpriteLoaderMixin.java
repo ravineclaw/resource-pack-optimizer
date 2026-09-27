@@ -6,6 +6,8 @@ import dev.ravineclaw.rpo.AtlasReuse;
 import dev.ravineclaw.rpo.DeferredMipmaps;
 import dev.ravineclaw.rpo.InputRecording;
 import dev.ravineclaw.rpo.ReuseGuard;
+import dev.ravineclaw.rpo.RpoSettings;
+import dev.ravineclaw.rpo.SpriteCache;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -15,6 +17,7 @@ import net.minecraft.client.Options;
 import net.minecraft.client.TextureFilteringMethod;
 import net.minecraft.client.renderer.texture.SpriteLoader;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
+import net.minecraft.client.renderer.texture.atlas.SpriteResourceLoader;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.metadata.MetadataSectionType;
 import net.minecraft.server.packs.resources.ResourceManager;
@@ -49,7 +52,7 @@ public abstract class SpriteLoaderMixin {
 		final Set<MetadataSectionType<?>> additionalMetadata,
 		final CallbackInfoReturnable<CompletableFuture<SpriteLoader.Preparations>> cir
 	) {
-		if (RPO_BYPASS.get() || !InputRecording.isTrackable(manager) || !ReuseGuard.untouched("atlases", ReuseGuard.ATLASES)) {
+		if (RPO_BYPASS.get() || !RpoSettings.active() || !InputRecording.isTrackable(manager) || !ReuseGuard.untouched("atlases", ReuseGuard.ATLASES)) {
 			return;
 		}
 
@@ -84,6 +87,17 @@ public abstract class SpriteLoaderMixin {
 	}
 
 	@WrapOperation(
+		method = "loadAndStitch",
+		at = @At(
+			value = "INVOKE",
+			target = "Lnet/minecraft/client/renderer/texture/atlas/SpriteResourceLoader;create(Ljava/util/Set;)Lnet/minecraft/client/renderer/texture/atlas/SpriteResourceLoader;"
+		)
+	)
+	private SpriteResourceLoader rpo$cachedSprites(final Set<MetadataSectionType<?>> additionalMetadata, final Operation<SpriteResourceLoader> original) {
+		return SpriteCache.wrap(original.call(additionalMetadata));
+	}
+
+	@WrapOperation(
 		method = "stitch",
 		at = @At(
 			value = "INVOKE",
@@ -91,6 +105,10 @@ public abstract class SpriteLoaderMixin {
 		)
 	)
 	private CompletableFuture<Void> rpo$deferMipmaps(final Runnable task, final Executor executor, final Operation<CompletableFuture<Void>> original) {
+		if (!RpoSettings.active()) {
+			return original.call(task, executor);
+		}
+
 		CompletableFuture<Void> placeholder = new CompletableFuture<>();
 		RPO_MIPMAPS.set(new DeferredMipmaps(task, executor, original::call, placeholder));
 		return placeholder;
