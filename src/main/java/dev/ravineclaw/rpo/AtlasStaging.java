@@ -1,7 +1,9 @@
 package dev.ravineclaw.rpo;
 
 import com.mojang.blaze3d.buffers.GpuBuffer;
+import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.platform.NativeImage;
+import com.mojang.blaze3d.shaders.ShaderType;
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.GpuDevice;
 import com.mojang.blaze3d.systems.RenderPass;
@@ -17,6 +19,9 @@ import java.util.Map;
 import java.util.OptionalInt;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.client.renderer.ShaderManager;
 import net.minecraft.client.renderer.texture.SpriteContents;
 import net.minecraft.client.renderer.texture.SpriteLoader;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
@@ -27,6 +32,7 @@ import org.lwjgl.system.MemoryUtil;
 
 public final class AtlasStaging {
 	private static final Map<Identifier, Staged> STAGED = new HashMap<>();
+	private static final List<RenderPipeline> ANIMATION_PIPELINES = List.of(RenderPipelines.ANIMATE_SPRITE_BLIT, RenderPipelines.ANIMATE_SPRITE_INTERPOLATE);
 
 	private AtlasStaging() {
 	}
@@ -132,6 +138,18 @@ public final class AtlasStaging {
 		return staged;
 	}
 
+	private static boolean animationShadersLoaded() {
+		ShaderManager shaders = Minecraft.getInstance().getShaderManager();
+		for (RenderPipeline pipeline : ANIMATION_PIPELINES) {
+			if (shaders.getShader(pipeline.getVertexShader(), ShaderType.VERTEX) == null
+				|| shaders.getShader(pipeline.getFragmentShader(), ShaderType.FRAGMENT) == null) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
 	public static void discard(final Identifier atlas) {
 		Staged staged;
 		synchronized (STAGED) {
@@ -207,6 +225,10 @@ public final class AtlasStaging {
 		}
 
 		private boolean create() {
+			if (!animationShadersLoaded()) {
+				return false;
+			}
+
 			this.built = AtlasBuilder.take(this.atlas, this.regions);
 			if (this.built == null) {
 				return false;
