@@ -61,4 +61,22 @@ public abstract class SimpleReloadInstanceMixin {
 
 		return original.call(steps, step);
 	}
+
+	@ModifyArg(
+		method = "<init>",
+		at = @At(
+			value = "INVOKE",
+			target = "Lnet/minecraft/server/packs/resources/SimpleReloadInstance$StateFactory;create(Lnet/minecraft/server/packs/resources/PreparableReloadListener$PreparationBarrier;Lnet/minecraft/server/packs/resources/ResourceManager;Lnet/minecraft/server/packs/resources/PreparableReloadListener;Ljava/util/concurrent/Executor;Ljava/util/concurrent/Executor;)Ljava/util/concurrent/CompletableFuture;"
+		),
+		index = 4
+	)
+	private Executor rpo$timeMainThread(
+		final PreparableReloadListener.PreparationBarrier barrier,
+		final ResourceManager resourceManager,
+		final PreparableReloadListener listener,
+		final Executor taskExecutor,
+		final Executor reloadExecutor
+	) {
+		return ReloadTimeline.ENABLED ? ReloadTimeline.timedMainThread(listener, reloadExecutor) : reloadExecutor;
+	}
 }
