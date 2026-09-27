@@ -4,6 +4,7 @@
 	"compatibilityLevel": "JAVA_21",
 	"plugin": "dev.ravineclaw.rpo.mixin.RpoMixinPlugin",
 	"client": [
+		"AbstractTextureAccessor",
 		"ColorMapListenerMixin",
 		"CompilationCacheMixin",
 		"CompositePackResourcesAccessor",
