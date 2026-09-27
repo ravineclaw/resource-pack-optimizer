@@ -11,6 +11,7 @@
 		"FixedPathPackResourcesMixin",
 		"FontAccessor",
 		"FontManagerMixin",
+		"GlslCompilerMixin",
 		"GuiMixin",
 		"HttpUtilMixin",
 		"LanguageManagerMixin",
