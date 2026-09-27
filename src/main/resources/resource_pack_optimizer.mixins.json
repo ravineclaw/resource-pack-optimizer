@@ -12,6 +12,7 @@
 		"FileResourcesSupplierAccessor",
 		"FontAccessor",
 		"FontManagerMixin",
+		"GlslCompilerMixin",
 		"GuiMixin",
 		"HttpUtilMixin",
 		"LanguageManagerMixin",

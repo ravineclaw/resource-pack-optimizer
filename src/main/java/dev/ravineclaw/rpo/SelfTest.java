@@ -46,6 +46,7 @@ public final class SelfTest {
 			waitUntil(minecraft, () -> minecraft.gui.overlay() == null && BackgroundReload.current() == null && minecraft.gui.screen() instanceof TitleScreen);
 			log("startup until title screen: {} ms", (System.nanoTime() - start) / 1_000_000L);
 			ReloadTimeline.log("startup reload");
+			log("shaders: {}", SpirvCache.stats());
 
 			if (!RpoSettings.mixinsDisabled()) {
 				CompletableFuture.runAsync(() -> MixinEnvironment.getCurrentEnvironment().audit(), minecraft).join();
