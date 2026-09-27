@@ -44,7 +44,5 @@ replay_*.log
 *.jfr
 
 # local notes
-CLAUDE.md
-.claude/
 docs/
 tools/
