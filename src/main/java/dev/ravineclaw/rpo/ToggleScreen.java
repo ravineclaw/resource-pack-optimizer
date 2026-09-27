@@ -10,22 +10,32 @@ public final class ToggleScreen {
 	}
 
 	public static Screen create(final Screen parent) {
-		boolean on = RpoSettings.enabledInFile();
-		boolean restart = on == RpoSettings.disabledThisSession();
 		Component title = Component.literal("Resource Pack Optimizer");
-		Component message = Component.literal((on ? "It is turned on." : "It is turned off.") + (restart ? " Restart the game for this to take effect." : ""));
+		if (RpoSettings.mixinsDisabled()) {
+			return new ConfirmScreen(
+				change -> Minecraft.getInstance().gui.setScreen(parent),
+				title,
+				Component.literal("It is turned off for this session by -Drpo.disable=true."),
+				Component.literal("Done"),
+				Component.literal("Back")
+			);
+		}
+
+		boolean on = RpoSettings.requested();
 		return new ConfirmScreen(
 			change -> {
 				Minecraft minecraft = Minecraft.getInstance();
 				if (change) {
 					RpoSettings.setEnabled(!on);
+					RpoSettings.request(!on);
 					minecraft.gui.setScreen(create(parent));
+					minecraft.reloadResourcePacks();
 				} else {
 					minecraft.gui.setScreen(parent);
 				}
 			},
 			title,
-			message,
+			Component.literal(on ? "It is turned on." : "It is turned off. Resources load like vanilla."),
 			Component.literal(on ? "Turn off" : "Turn on"),
 			Component.literal("Done")
 		);

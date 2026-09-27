@@ -8,7 +8,7 @@ import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 
 public class RpoMixinPlugin implements IMixinConfigPlugin {
-	private static final boolean DISABLED = RpoSettings.disabledThisSession();
+	private static final boolean DISABLED = RpoSettings.mixinsDisabled();
 
 	@Override
 	public void onLoad(final String mixinPackage) {

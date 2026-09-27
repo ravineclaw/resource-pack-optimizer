@@ -160,6 +160,18 @@ public final class AtlasStaging {
 		}
 	}
 
+	public static void discardAll() {
+		List<Staged> all;
+		synchronized (STAGED) {
+			all = new ArrayList<>(STAGED.values());
+			STAGED.clear();
+		}
+
+		for (Staged staged : all) {
+			FramePump.closeLater(staged.resources());
+		}
+	}
+
 	public static void release(final Staged staged) {
 		FramePump.closeLater(staged.resources());
 	}

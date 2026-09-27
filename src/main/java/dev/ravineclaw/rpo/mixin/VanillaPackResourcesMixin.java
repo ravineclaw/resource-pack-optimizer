@@ -1,6 +1,7 @@
 package dev.ravineclaw.rpo.mixin;
 
 import dev.ravineclaw.rpo.ImmutablePack;
+import dev.ravineclaw.rpo.RpoSettings;
 import java.io.InputStream;
 import java.nio.file.FileSystems;
 import java.nio.file.Path;
@@ -74,7 +75,7 @@ public abstract class VanillaPackResourcesMixin implements ImmutablePack {
 	private void rpo$cachedListResources(
 		final PackType type, final String namespace, final String directory, final PackResources.ResourceOutput output, final CallbackInfo ci
 	) {
-		if (RPO_BYPASS.get() || !this.rpo$isImmutable()) {
+		if (RPO_BYPASS.get() || !RpoSettings.active() || !this.rpo$isImmutable()) {
 			return;
 		}
 
@@ -102,7 +103,7 @@ public abstract class VanillaPackResourcesMixin implements ImmutablePack {
 
 	@Inject(method = "getResource", at = @At("HEAD"), cancellable = true)
 	private void rpo$cachedGetResource(final PackType type, final Identifier location, final CallbackInfoReturnable<IoSupplier<InputStream>> cir) {
-		if (RPO_BYPASS.get() || !this.rpo$isImmutable()) {
+		if (RPO_BYPASS.get() || !RpoSettings.active() || !this.rpo$isImmutable()) {
 			return;
 		}
 
