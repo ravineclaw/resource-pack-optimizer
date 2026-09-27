@@ -51,7 +51,7 @@ public final class SelfTest {
 			waitUntil(minecraft, () -> minecraft.getOverlay() == null && BackgroundReload.current() == null && minecraft.screen instanceof TitleScreen);
 			log("startup until title screen: {} ms", (System.nanoTime() - start) / 1_000_000L);
 
-			if (!Boolean.getBoolean("rpo.disable")) {
+			if (!RpoSettings.disabledThisSession()) {
 				CompletableFuture.runAsync(() -> MixinEnvironment.getCurrentEnvironment().audit(), minecraft).join();
 				log("mixin audit passed");
 			}
