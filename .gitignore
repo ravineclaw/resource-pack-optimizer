@@ -43,9 +43,8 @@ replay_*.log
 *.hprof
 *.jfr
 
-# Claude Code handoff notes (local only)
+# local notes
 CLAUDE.md
 .claude/
-README.md
 docs/
 tools/
