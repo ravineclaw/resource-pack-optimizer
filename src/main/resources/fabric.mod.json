@@ -13,6 +13,9 @@
 	"entrypoints": {
 		"client": [
 			"dev.ravineclaw.rpo.ResourcePackOptimizer"
+		],
+		"modmenu": [
+			"dev.ravineclaw.rpo.ModMenuIntegration"
 		]
 	},
 	"mixins": [
