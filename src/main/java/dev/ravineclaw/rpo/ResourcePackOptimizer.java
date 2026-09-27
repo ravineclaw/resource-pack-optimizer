@@ -14,5 +14,6 @@ public class ResourcePackOptimizer implements ClientModInitializer {
 		}
 
 		SelfTest.startIfRequested();
+		Benchmark.startIfRequested();
 	}
 }
