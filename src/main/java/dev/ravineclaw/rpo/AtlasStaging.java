@@ -100,6 +100,18 @@ public final class AtlasStaging {
 		}
 	}
 
+	public static void discardAll() {
+		List<Staged> all;
+		synchronized (STAGED) {
+			all = new ArrayList<>(STAGED.values());
+			STAGED.clear();
+		}
+
+		for (Staged staged : all) {
+			FramePump.closeLater(staged.resources());
+		}
+	}
+
 	public static void release(final Staged staged) {
 		FramePump.closeLater(staged.resources());
 	}
@@ -208,7 +220,7 @@ public final class AtlasStaging {
 				}
 
 				AtlasBuilder.Tile next = tiles.get(this.tile++);
-				encoder.writeToTexture(this.staged.texture, next.pixels().asIntBuffer(), NativeImage.Format.RGBA, this.level, next.x(), next.y(), next.width(), next.height());
+				encoder.writeToTexture(this.staged.texture, next.pixels(), NativeImage.Format.RGBA, this.level, next.x(), next.y(), next.width(), next.height());
 			}
 
 			this.built.close();

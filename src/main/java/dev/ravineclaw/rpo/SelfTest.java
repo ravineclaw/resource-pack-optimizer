@@ -1,26 +1,42 @@
 package dev.ravineclaw.rpo;
 
 import com.mojang.blaze3d.platform.NativeImage;
+import com.mojang.blaze3d.systems.RenderSystem;
+import dev.ravineclaw.rpo.mixin.TextureAtlasAccessor;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.GenericMessageScreen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.gui.screens.worldselection.SelectWorldScreen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.client.gui.screens.PauseScreen;
+import net.minecraft.client.Screenshot;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.renderer.texture.TextureAtlas;
+import net.minecraft.client.renderer.texture.TextureAtlasSprite;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
+import net.minecraft.client.resources.sounds.SoundInstance;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.repository.PackRepository;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.LevelSettings;
 import net.minecraft.world.level.WorldDataConfiguration;
 import net.minecraft.world.level.levelgen.presets.WorldPresets;
+import net.minecraft.world.phys.Vec3;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.core.config.Configurator;
+import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.MixinEnvironment;
 
 public final class SelfTest {
@@ -49,8 +65,9 @@ public final class SelfTest {
 			Minecraft minecraft = waitFor(Minecraft::getInstance);
 			waitUntil(minecraft, () -> minecraft.getOverlay() == null && BackgroundReload.current() == null && minecraft.screen instanceof TitleScreen);
 			log("startup until title screen: {} ms", (System.nanoTime() - start) / 1_000_000L);
+			ReloadTimeline.log("startup reload");
 
-			if (!RpoSettings.disabledThisSession()) {
+			if (!RpoSettings.mixinsDisabled()) {
 				CompletableFuture.runAsync(() -> MixinEnvironment.getCurrentEnvironment().audit(), minecraft).join();
 				log("mixin audit passed");
 			}
@@ -64,8 +81,21 @@ public final class SelfTest {
 			}
 
 			String tag = System.getProperty("rpo.selftest.tag", "run");
+			if (!RpoSettings.mixinsDisabled()) {
+				boolean inWorld = minecraft.level != null;
+				RpoSettings.request(false);
+				reload(minecraft, "turned off", inWorld);
+				screenshot(minecraft, tag + "-world-off");
+				Path offDir = minecraft.gameDirectory.toPath().resolve("rpo-dump").resolve(tag + "-off");
+				dump(minecraft, offDir);
+				log("dumped atlases with the mod turned off to {}", offDir);
+				RpoSettings.request(true);
+				reload(minecraft, "turned on again", inWorld);
+				reload(minecraft, "reload after turning on", inWorld);
+			}
+
 			Path dumpDir = minecraft.gameDirectory.toPath().resolve("rpo-dump").resolve(tag);
-			CompletableFuture.runAsync(() -> minecraft.getTextureManager().dumpAllSheets(dumpDir), minecraft).join();
+			dump(minecraft, dumpDir);
 			log("dumped atlases to {}", dumpDir);
 
 			if (minecraft.level != null) {
@@ -76,6 +106,7 @@ public final class SelfTest {
 				waitUntil(minecraft, () -> minecraft.level == null);
 			}
 
+			SpriteDiskCache.flush();
 			log("done");
 			minecraft.execute(minecraft::stop);
 		} catch (Throwable t) {
@@ -105,13 +136,38 @@ public final class SelfTest {
 		waitForChunks(minecraft, 180_000L);
 		log("world open with all chunks built: {} ms ({} sections)", (System.nanoTime() - start) / 1_000_000L, sections(minecraft));
 
+		SoundInstance record = CompletableFuture.supplyAsync(() -> {
+			SoundInstance instance = SimpleSoundInstance.forMusic(SoundEvents.MUSIC_DISC_CAT.value());
+			minecraft.getSoundManager().play(instance);
+			return instance;
+		}, minecraft).join();
+		long soundDeadline = System.currentTimeMillis() + 3_000L;
+		while (!CompletableFuture.supplyAsync(() -> minecraft.getSoundManager().isActive(record), minecraft).join() && System.currentTimeMillis() < soundDeadline) {
+			Thread.sleep(10L);
+		}
+
+		boolean playing = CompletableFuture.supplyAsync(() -> minecraft.getSoundManager().isActive(record), minecraft).join();
 		for (int i = 0; i < 2; i++) {
 			reload(minecraft, "world reload " + (i + 1), true);
 		}
 
+		if (playing) {
+			log(
+				"record still playing after two unchanged reloads: {} (expected true, sounds kept: {})",
+				CompletableFuture.supplyAsync(() -> minecraft.getSoundManager().isActive(record), minecraft).join(),
+				ReloadChanges.isUnchanged("sounds")
+			);
+		} else {
+			log("record didn't start (no sound device), skipping the sound check");
+		}
+
+		CompletableFuture.runAsync(() -> minecraft.getSoundManager().stop(record), minecraft).join();
+
 		togglePack(minecraft, SOUND_PACK);
 		togglePack(minecraft, TEXTURE_PACK);
+		checkSpriteFinders(minecraft);
 		folderProbe(minecraft);
+		checkSpriteFinders(minecraft);
 
 		int mipmaps = minecraft.options.mipmapLevels().get();
 		setMipmaps(minecraft, mipmaps == 4 ? 2 : 4);
@@ -120,6 +176,50 @@ public final class SelfTest {
 		reload(minecraft, "world mipmap restore", true);
 
 		reload(minecraft, "world final reload", true);
+		screenshot(minecraft, System.getProperty("rpo.selftest.tag", "run") + "-world");
+	}
+
+	private static void checkSpriteFinders(final Minecraft minecraft) {
+		CompletableFuture.runAsync(() -> {
+			for (ResourceLocation id : List.of(TextureAtlas.LOCATION_BLOCKS, TextureAtlas.LOCATION_PARTICLES)) {
+				if (!(minecraft.getTextureManager().getTexture(id) instanceof TextureAtlas atlas)) {
+					continue;
+				}
+
+				try {
+					Method finder = atlas.getClass().getMethod("spriteFinder");
+					checkSpriteFinder("Fabric", id, atlas, finder.invoke(atlas));
+				} catch (NoSuchMethodException e) {
+					continue;
+				} catch (ReflectiveOperationException | RuntimeException e) {
+					ResourcePackOptimizer.LOGGER.error("[selftest] Fabric sprite finder of {} failed", id, e);
+				}
+			}
+
+			try {
+				Class<?> cache = Class.forName("net.caffeinemc.mods.sodium.client.render.texture.SpriteFinderCache");
+				checkSpriteFinder("Sodium", TextureAtlas.LOCATION_BLOCKS, (TextureAtlas)minecraft.getTextureManager().getTexture(TextureAtlas.LOCATION_BLOCKS), cache.getMethod("forBlockAtlas").invoke(null));
+			} catch (ClassNotFoundException e) {
+				return;
+			} catch (ReflectiveOperationException | RuntimeException e) {
+				ResourcePackOptimizer.LOGGER.error("[selftest] Sodium sprite finder failed", e);
+			}
+		}, minecraft).join();
+	}
+
+	private static void checkSpriteFinder(final String mod, final ResourceLocation id, final TextureAtlas atlas, final Object finder) throws ReflectiveOperationException {
+		Method find = finder.getClass().getMethod("find", float.class, float.class);
+		find.setAccessible(true);
+		int checked = 0;
+		int wrong = 0;
+		for (TextureAtlasSprite sprite : ((TextureAtlasAccessor)atlas).rpo$getTexturesByName().values()) {
+			checked++;
+			if (find.invoke(finder, (sprite.getU0() + sprite.getU1()) / 2.0F, (sprite.getV0() + sprite.getV1()) / 2.0F) != sprite) {
+				wrong++;
+			}
+		}
+
+		log("{} sprite finder of {}: {} sprites checked, {} wrong", mod, id, checked, wrong);
 	}
 
 	private static void togglePack(final Minecraft minecraft, final String packId) throws InterruptedException {
@@ -181,7 +281,48 @@ public final class SelfTest {
 		}, minecraft).join();
 	}
 
+	private static void screenshot(final Minecraft minecraft, final String name) throws InterruptedException {
+		if (minecraft.level == null) {
+			return;
+		}
+
+		Thread.sleep(1000L);
+		CompletableFuture.supplyAsync(() -> screenshotNow(minecraft, name), minecraft).join().join();
+	}
+
+	private static CompletableFuture<Void> screenshotNow(final Minecraft minecraft, final String name) {
+		Path file = minecraft.gameDirectory.toPath().resolve("rpo-dump").resolve(name + ".png");
+		CompletableFuture<Void> written = new CompletableFuture<>();
+		Screenshot.takeScreenshot(minecraft.getMainRenderTarget(), image -> {
+			try (image) {
+				Files.createDirectories(file.getParent());
+				image.writeToFile(file);
+				log("screenshot {}", file);
+			} catch (Exception e) {
+				ResourcePackOptimizer.LOGGER.error("[selftest] screenshot failed", e);
+			} finally {
+				written.complete(null);
+			}
+		});
+		return written;
+	}
+
+	private static void dump(final Minecraft minecraft, final Path directory) {
+		CompletableFuture<Void> written = new CompletableFuture<>();
+		CompletableFuture.runAsync(() -> {
+			minecraft.getTextureManager().dumpAllSheets(directory);
+			RenderSystem.queueFencedTask(() -> written.complete(null));
+		}, minecraft).join();
+		written.join();
+	}
+
 	private static void reload(final Minecraft minecraft, final String label, final boolean waitForChunks) throws InterruptedException {
+		reload(minecraft, label, waitForChunks, null, () -> false);
+	}
+
+	private static void reload(
+		final Minecraft minecraft, final String label, final boolean waitForChunks, final @Nullable String shot, final BooleanSupplier state
+	) throws InterruptedException {
 		CompletableFuture.runAsync(ReloadTimeline::resetFrames, minecraft).join();
 		long start = System.nanoTime();
 		boolean blocking = CompletableFuture.supplyAsync(() -> {
@@ -192,8 +333,29 @@ public final class SelfTest {
 			log("{}: reload shows a blocking overlay", label);
 		}
 
+		CompletableFuture<Void> shotWritten = null;
+		while (shot != null) {
+			shotWritten = CompletableFuture.supplyAsync(() -> state.getAsBoolean() ? screenshotNow(minecraft, shot) : null, minecraft).join();
+			boolean finished = CompletableFuture.supplyAsync(
+				() -> minecraft.getOverlay() == null && BackgroundReload.current() == null, minecraft
+			).join();
+			if (shotWritten != null || finished || System.nanoTime() - start > 10_000_000_000L) {
+				break;
+			}
+
+			Thread.sleep(1L);
+		}
+
+		if (shot != null) {
+			log("{}: screenshot {} taken: {}", label, shot, shotWritten != null);
+		}
+
 		waitUntil(minecraft, () -> minecraft.getOverlay() == null && BackgroundReload.current() == null);
 		long overlay = (System.nanoTime() - start) / 1_000_000L;
+		if (shotWritten != null) {
+			shotWritten.join();
+		}
+
 		long frame = ReloadTimeline.longestFrameMillis();
 		ReloadTimeline.log(label);
 		if (!waitForChunks) {
@@ -203,6 +365,38 @@ public final class SelfTest {
 
 		waitForChunks(minecraft, 60_000L);
 		log("{}: until overlay gone {} ms, until all chunks built {} ms, longest frame {} ms", label, overlay, (System.nanoTime() - start) / 1_000_000L, frame);
+		if (shotWritten != null) {
+			String after = shot + "-after";
+			CompletableFuture.supplyAsync(() -> screenshotNow(minecraft, after), minecraft).join().join();
+			log("{}: {} differs from the rebuilt frame in {}% of pixels (expected < 1)", label, shot, differingPercent(minecraft, shot, after));
+		}
+	}
+
+	private static String differingPercent(final Minecraft minecraft, final String first, final String second) {
+		Path directory = minecraft.gameDirectory.toPath().resolve("rpo-dump");
+		try (NativeImage a = NativeImage.read(Files.readAllBytes(directory.resolve(first + ".png")));
+			NativeImage b = NativeImage.read(Files.readAllBytes(directory.resolve(second + ".png")))) {
+			if (a.getWidth() != b.getWidth() || a.getHeight() != b.getHeight()) {
+				return "100 (size differs)";
+			}
+
+			long differing = 0;
+			int top = a.getHeight() / 20;
+			for (int y = top; y < a.getHeight(); y++) {
+				for (int x = 0; x < a.getWidth(); x++) {
+					int p = a.getPixel(x, y);
+					int q = b.getPixel(x, y);
+					int delta = Math.abs((p & 0xFF) - (q & 0xFF)) + Math.abs((p >> 8 & 0xFF) - (q >> 8 & 0xFF)) + Math.abs((p >> 16 & 0xFF) - (q >> 16 & 0xFF));
+					if (delta > 30) {
+						differing++;
+					}
+				}
+			}
+
+			return String.format(Locale.ROOT, "%.3f", differing * 100.0 / ((long)a.getWidth() * (a.getHeight() - top)));
+		} catch (Exception e) {
+			return "unknown (" + e + ")";
+		}
 	}
 
 	private static void waitForChunks(final Minecraft minecraft, final long timeoutMillis) throws InterruptedException {

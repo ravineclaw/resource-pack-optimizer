@@ -10,8 +10,10 @@ import dev.ravineclaw.rpo.AtlasBuilder;
 import dev.ravineclaw.rpo.AtlasReuse;
 import dev.ravineclaw.rpo.AtlasStaging;
 import dev.ravineclaw.rpo.FramePump;
+import dev.ravineclaw.rpo.ModCompat;
 import dev.ravineclaw.rpo.ReloadChanges;
 import dev.ravineclaw.rpo.ResourcePackOptimizer;
+import dev.ravineclaw.rpo.RpoSettings;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -62,6 +64,16 @@ public abstract class TextureAtlasMixin extends AbstractTexture {
 
 	@Inject(method = "upload", at = @At("HEAD"), cancellable = true)
 	private void rpo$takePrebuilt(final SpriteLoader.Preparations preparations, final CallbackInfo ci) {
+		if (this.rpo$prebuilt != null) {
+			this.rpo$prebuilt.close();
+			this.rpo$prebuilt = null;
+		}
+
+		if (!RpoSettings.active()) {
+			AtlasReuse.forget(this.location);
+			return;
+		}
+
 		if (AtlasReuse.isUploaded(this.location, preparations)) {
 			ReloadChanges.unchanged("atlas:" + this.location);
 			ci.cancel();
@@ -95,6 +107,7 @@ public abstract class TextureAtlasMixin extends AbstractTexture {
 	}
 
 	@Unique
+	@SuppressWarnings("deprecation")
 	private boolean rpo$swapIn(final AtlasStaging.Staged staged, final SpriteLoader.Preparations preparations) {
 		Map<ResourceLocation, TextureAtlasSprite> byName = Map.copyOf(preparations.regions());
 		TextureAtlasSprite missing = byName.get(MissingTextureAtlasSprite.getLocation());
@@ -114,7 +127,6 @@ public abstract class TextureAtlasMixin extends AbstractTexture {
 
 		List<AutoCloseable> old = new ArrayList<>(this.sprites);
 		old.addAll(this.animatedTextures);
-
 		if (this.texture != null) {
 			old.add(this.texture);
 		}
@@ -128,6 +140,7 @@ public abstract class TextureAtlasMixin extends AbstractTexture {
 		this.missingSprite = missing;
 		this.sprites = List.copyOf(contents);
 		this.animatedTextures = List.copyOf(tickers);
+		ModCompat.atlasSwapped((TextureAtlas)(Object)this);
 		FramePump.closeLater(old);
 		return true;
 	}
@@ -163,7 +176,7 @@ public abstract class TextureAtlasMixin extends AbstractTexture {
 				AtlasBuilder.Level[] levels = built.levels();
 				for (int level = 0; level < levels.length; level++) {
 					for (AtlasBuilder.Tile tile : levels[level].tiles()) {
-						encoder.writeToTexture(texture, tile.pixels().asIntBuffer(), NativeImage.Format.RGBA, level, tile.x(), tile.y(), tile.width(), tile.height());
+						encoder.writeToTexture(texture, tile.pixels(), NativeImage.Format.RGBA, level, tile.x(), tile.y(), tile.width(), tile.height());
 					}
 				}
 
@@ -186,7 +199,9 @@ public abstract class TextureAtlasMixin extends AbstractTexture {
 	private void rpo$rememberUpload(final SpriteLoader.Preparations preparations, final CallbackInfo ci) {
 		this.rpo$uploading = false;
 		this.rpo$releasePrebuilt();
-		AtlasReuse.uploadFinished(this.location, preparations);
+		if (RpoSettings.active()) {
+			AtlasReuse.uploadFinished(this.location, preparations);
+		}
 	}
 
 	@Unique

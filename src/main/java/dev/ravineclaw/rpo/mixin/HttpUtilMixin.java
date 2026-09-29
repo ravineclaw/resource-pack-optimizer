@@ -2,6 +2,7 @@ package dev.ravineclaw.rpo.mixin;
 
 import com.google.common.hash.HashCode;
 import com.google.common.hash.HashFunction;
+import dev.ravineclaw.rpo.RpoSettings;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -37,6 +38,10 @@ public abstract class HttpUtilMixin {
 
 	@Inject(method = "hashFile", at = @At("HEAD"), cancellable = true)
 	private static void rpo$cachedHash(final Path file, final HashFunction hashFunction, final CallbackInfoReturnable<HashCode> cir) {
+		if (!RpoSettings.active()) {
+			return;
+		}
+
 		String key = rpo$key(file, hashFunction);
 		if (key != null) {
 			HashCode cached = RPO_HASHES.get(key);
@@ -48,6 +53,10 @@ public abstract class HttpUtilMixin {
 
 	@Inject(method = "hashFile", at = @At("RETURN"))
 	private static void rpo$storeHash(final Path file, final HashFunction hashFunction, final CallbackInfoReturnable<HashCode> cir) {
+		if (!RpoSettings.active()) {
+			return;
+		}
+
 		String key = rpo$key(file, hashFunction);
 		if (key != null && cir.getReturnValue() != null) {
 			RPO_HASHES.put(key, cir.getReturnValue());

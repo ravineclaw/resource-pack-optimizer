@@ -1,5 +1,6 @@
 package dev.ravineclaw.rpo.mixin;
 
+import dev.ravineclaw.rpo.RpoSettings;
 import net.minecraft.client.renderer.ShaderManager;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.util.profiling.ProfilerFiller;
@@ -28,6 +29,10 @@ public abstract class ShaderManagerMixin {
 			same = last != null && last.equals(preparations);
 		} catch (RuntimeException e) {
 			same = false;
+		}
+
+		if (!RpoSettings.active()) {
+			return;
 		}
 
 		if (same) {
