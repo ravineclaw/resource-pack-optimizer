@@ -17,4 +17,8 @@ public interface PackStack {
 	long @Nullable [] rpo$versions();
 
 	void rpo$setVersions(long[] versions);
+
+	PackFingerprints.@Nullable StackSources rpo$sources();
+
+	void rpo$setSources(PackFingerprints.StackSources sources);
 }
