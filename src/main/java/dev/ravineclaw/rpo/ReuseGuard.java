@@ -56,6 +56,11 @@ public final class ReuseGuard {
 		"net.minecraft.client.renderer.texture.CubeMapTexture",
 		"net.minecraft.client.renderer.texture.TextureContents"
 	};
+	public static final String[] SOUNDS = {
+		"net.minecraft.client.sounds.SoundManager",
+		"net.minecraft.client.sounds.SoundEngine",
+		"net.minecraft.client.sounds.SoundBufferLibrary"
+	};
 	public static final String[] CHUNKS = {
 		"net.minecraft.client.renderer.extract.LevelExtractor"
 	};
