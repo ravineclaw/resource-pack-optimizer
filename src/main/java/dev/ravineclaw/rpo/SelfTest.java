@@ -13,7 +13,10 @@ import java.util.function.Supplier;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.gui.screens.worldselection.SelectWorldScreen;
+import net.minecraft.client.renderer.texture.TextureAtlas;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
+import net.minecraft.data.AtlasIds;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.repository.PackRepository;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.LevelSettings;
@@ -133,32 +136,43 @@ public final class SelfTest {
 	}
 
 	private static void checkSpriteFinders(final Minecraft minecraft) {
-		CompletableFuture.runAsync(() -> minecraft.getAtlasManager().forEach((id, atlas) -> {
-			Method finderMethod;
-			try {
-				finderMethod = atlas.getClass().getMethod("spriteFinder");
-			} catch (NoSuchMethodException e) {
-				return;
-			}
-
-			try {
-				Object finder = finderMethod.invoke(atlas);
-				Method find = finder.getClass().getMethod("find", float.class, float.class);
-				find.setAccessible(true);
-				int checked = 0;
-				int wrong = 0;
-				for (TextureAtlasSprite sprite : ((TextureAtlasAccessor)atlas).rpo$getTexturesByName().values()) {
-					checked++;
-					if (find.invoke(finder, (sprite.getU0() + sprite.getU1()) / 2.0F, (sprite.getV0() + sprite.getV1()) / 2.0F) != sprite) {
-						wrong++;
-					}
+		CompletableFuture.runAsync(() -> {
+			minecraft.getAtlasManager().forEach((id, atlas) -> {
+				try {
+					Method finder = atlas.getClass().getMethod("spriteFinder");
+					checkSpriteFinder("Fabric", id, atlas, finder.invoke(atlas));
+				} catch (NoSuchMethodException e) {
+					return;
+				} catch (ReflectiveOperationException | RuntimeException e) {
+					ResourcePackOptimizer.LOGGER.error("[selftest] Fabric sprite finder of {} failed", id, e);
 				}
+			});
 
-				log("Fabric sprite finder of {}: {} sprites checked, {} wrong", id, checked, wrong);
+			try {
+				Class<?> cache = Class.forName("net.caffeinemc.mods.sodium.client.render.texture.SpriteFinderCache");
+				checkSpriteFinder("Sodium", AtlasIds.BLOCKS, minecraft.getAtlasManager().getAtlasOrThrow(AtlasIds.BLOCKS), cache.getMethod("forBlockAtlas").invoke(null));
+				checkSpriteFinder("Sodium", AtlasIds.ITEMS, minecraft.getAtlasManager().getAtlasOrThrow(AtlasIds.ITEMS), cache.getMethod("forItemAtlas").invoke(null));
+			} catch (ClassNotFoundException e) {
+				return;
 			} catch (ReflectiveOperationException | RuntimeException e) {
-				ResourcePackOptimizer.LOGGER.error("[selftest] Fabric sprite finder of {} failed", id, e);
+				ResourcePackOptimizer.LOGGER.error("[selftest] Sodium sprite finder failed", e);
 			}
-		}), minecraft).join();
+		}, minecraft).join();
+	}
+
+	private static void checkSpriteFinder(final String mod, final Identifier id, final TextureAtlas atlas, final Object finder) throws ReflectiveOperationException {
+		Method find = finder.getClass().getMethod("find", float.class, float.class);
+		find.setAccessible(true);
+		int checked = 0;
+		int wrong = 0;
+		for (TextureAtlasSprite sprite : ((TextureAtlasAccessor)atlas).rpo$getTexturesByName().values()) {
+			checked++;
+			if (find.invoke(finder, (sprite.getU0() + sprite.getU1()) / 2.0F, (sprite.getV0() + sprite.getV1()) / 2.0F) != sprite) {
+				wrong++;
+			}
+		}
+
+		log("{} sprite finder of {}: {} sprites checked, {} wrong", mod, id, checked, wrong);
 	}
 
 	private static void togglePack(final Minecraft minecraft, final String packId) throws InterruptedException {

@@ -47,6 +47,12 @@ loom {
 
 repositories {
 	maven {
+		url = "https://api.modrinth.com/maven"
+		content {
+			includeGroup "maven.modrinth"
+		}
+	}
+	maven {
 		url = "https://maven.terraformersmc.com/releases/"
 		content {
 			includeGroup "com.terraformersmc"
@@ -59,6 +65,9 @@ dependencies {
 	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
 	compileOnly("com.terraformersmc:modmenu:${project.modmenu_version}") {
 		transitive = false
+	}
+	if (project.hasProperty("rpoSodium")) {
+		runtimeOnly "maven.modrinth:sodium:${project.findProperty('rpoSodium')}"
 	}
 	if (project.hasProperty("rpoFabricApi")) {
 		runtimeOnly "net.fabricmc.fabric-api:fabric-api:${project.findProperty('rpoFabricApi')}"
