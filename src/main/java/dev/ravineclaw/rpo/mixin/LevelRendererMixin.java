@@ -1,7 +1,5 @@
 package dev.ravineclaw.rpo.mixin;
 
-import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
-import com.mojang.blaze3d.textures.GpuTextureView;
 import dev.ravineclaw.rpo.TerrainHandoff;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import net.minecraft.client.Camera;
@@ -76,13 +74,5 @@ public abstract class LevelRendererMixin {
 	@Inject(method = {"prepareChunkRenders", "prepareChunkRendersIndirect"}, at = @At("HEAD"))
 	private void rpo$handoffFrame(final CallbackInfoReturnable<?> cir) {
 		TerrainHandoff.frame(this.viewArea, this.visibleSections);
-	}
-
-	@ModifyExpressionValue(
-		method = {"executeSolid", "executeOit", "prepareChunkRenders", "prepareChunkRendersIndirect"},
-		at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/texture/AbstractTexture;getTextureView()Lcom/mojang/renderpearl/api/textures/GpuTextureView;")
-	)
-	private GpuTextureView rpo$terrainAtlas(final GpuTextureView atlas) {
-		return TerrainHandoff.terrainAtlas(atlas);
 	}
 }

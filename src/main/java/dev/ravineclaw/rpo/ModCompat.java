@@ -75,6 +75,7 @@ public final class ModCompat {
 					"onCreatePoseStack",
 					"afterCollectSubmits",
 					"afterRenderSolidFeatures",
+					"afterRenderTranslucentFeatures",
 					"afterRenderClassicTranslucentFeatures",
 					"afterRenderOitTranslucentFeatures",
 					"beforeRenderBlockOutline",
@@ -93,6 +94,7 @@ public final class ModCompat {
 			"net.caffeinemc.mods.sodium.mixin.features.textures.animations.tracking.SpriteContentsTickerMixin",
 			new Rule(Set.of("assignParent", "captureActiveState", "preTick"), () -> true)
 		),
+		Map.entry("net.caffeinemc.mods.sodium.mixin.features.textures.animations.tracking.TextureAtlasSpriteMixin", new Rule(Set.of("markSpriteAsActive"), () -> true)),
 		Map.entry("net.caffeinemc.mods.sodium.mixin.features.textures.scan.TextureAtlasSpriteMixin", new Rule(Set.of("hookTickerInstantiation"), () -> true)),
 		Map.entry(
 			"net.caffeinemc.mods.sodium.mixin.core.render.world.LevelExtractorMixin",
