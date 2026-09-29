@@ -30,6 +30,7 @@
 		"PendingStitchResultsAccessor",
 		"ReloadableResourceManagerMixin",
 		"ReloadableTextureMixin",
+		"ResourceAccessor",
 		"ShaderManagerMixin",
 		"SimpleReloadInstanceMixin",
 		"SoundEngineMixin",

@@ -103,8 +103,7 @@ public final class InputRecording {
 				Set<Identifier> ids = key.stacks()
 					? other.listResourceStacks(key.directory(), key.selector()).keySet()
 					: other.listResources(key.directory(), key.selector()).keySet();
-				Listing now = listing(stack, ids, scratch);
-				if (now == null || !now.equals(entry.getValue())) {
+				if (!entry.getValue().matches(stack, ids, scratch)) {
 					return false;
 				}
 			}
@@ -214,6 +213,34 @@ public final class InputRecording {
 	}
 
 	private record Listing(Identifier[] ids, long[] signatures) {
+		private boolean matches(final PackStack stack, final Set<Identifier> now, final LongArrayList scratch) {
+			if (now.size() != this.ids.length) {
+				return false;
+			}
+
+			Identifier[] sorted = now.toArray(Identifier[]::new);
+			Arrays.sort(sorted);
+			if (!Arrays.equals(sorted, this.ids)) {
+				return false;
+			}
+
+			int position = 0;
+			for (Identifier id : sorted) {
+				scratch.clear();
+				appendSignature(stack.rpo$packs(), stack.rpo$filters(), stack.rpo$type(), id, scratch);
+				int length = scratch.size();
+				if (position + length > this.signatures.length
+					|| scratch.contains(PackFingerprints.UNKNOWN)
+					|| !Arrays.equals(scratch.elements(), 0, length, this.signatures, position, position + length)) {
+					return false;
+				}
+
+				position += length;
+			}
+
+			return position == this.signatures.length;
+		}
+
 		@Override
 		public boolean equals(final Object o) {
 			return o instanceof Listing other && Arrays.equals(this.ids, other.ids) && Arrays.equals(this.signatures, other.signatures);

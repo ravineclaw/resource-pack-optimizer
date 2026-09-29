@@ -1,15 +1,22 @@
 package dev.ravineclaw.rpo;
 
 import com.mojang.blaze3d.platform.NativeImage;
+import dev.ravineclaw.rpo.mixin.ResourceAccessor;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 import net.jpountz.xxhash.XXHash64;
 import net.jpountz.xxhash.XXHashFactory;
 import net.minecraft.client.renderer.texture.MipmapStrategy;
@@ -34,10 +41,16 @@ public final class SpriteCache {
 	private static final long BUDGET = Math.clamp(Runtime.getRuntime().maxMemory() / 8L, MIN_BUDGET, MAX_BUDGET);
 	private static final ThreadLocal<Pending> LOADING = new ThreadLocal<>();
 	private static final Map<Key, Entry> ENTRIES = new ConcurrentHashMap<>();
+	private static final Map<SourceKey, Key> SOURCES = new ConcurrentHashMap<>();
+	private static final int MAX_SOURCES = 1 << 17;
+	private static final Map<ZipFile, ZipId> ZIP_IDS = new WeakHashMap<>();
+	private static final ZipId NO_ZIP_ID = new ZipId("", -1L, -1L);
+	private static final long RACY_MILLIS = 3000L;
 	private static final AtomicLong BYTES = new AtomicLong();
 	private static final AtomicInteger GENERATION = new AtomicInteger();
 	private static final AtomicInteger HITS = new AtomicInteger();
 	private static final AtomicInteger MISSES = new AtomicInteger();
+	private static final AtomicInteger UNREAD = new AtomicInteger();
 	private static final AtomicInteger MIP_HITS = new AtomicInteger();
 	private static final AtomicInteger MIP_MISSES = new AtomicInteger();
 	private static volatile @Nullable XXHash64 hash;
@@ -46,6 +59,12 @@ public final class SpriteCache {
 	}
 
 	public record Key(long first, long second, int length) {
+	}
+
+	private record ZipId(String path, long size, long modified) {
+	}
+
+	private record SourceKey(ZipId zip, String name, long crc, long size, long compressedSize, long time) {
 	}
 
 	public record MipKey(boolean item, MipmapStrategy strategy, float alphaCutoffBias) {
@@ -108,6 +127,60 @@ public final class SpriteCache {
 	private static final class Pending {
 		private @Nullable Entry entry;
 		private @Nullable NativeImage image;
+		private @Nullable SourceKey source;
+		private @Nullable Key known;
+	}
+
+	private static final class DeferredStream extends InputStream {
+		private final Pending pending;
+		private final Resource resource;
+		private @Nullable InputStream delegate;
+		private boolean closed;
+
+		private DeferredStream(final Pending pending, final Resource resource) {
+			this.pending = pending;
+			this.resource = resource;
+		}
+
+		private InputStream delegate() throws IOException {
+			if (this.closed) {
+				throw new IOException("Stream closed");
+			}
+
+			if (this.delegate == null) {
+				this.delegate = this.resource.open();
+			}
+
+			return this.delegate;
+		}
+
+		@Override
+		public int read() throws IOException {
+			return this.delegate().read();
+		}
+
+		@Override
+		public int read(final byte[] buffer, final int offset, final int length) throws IOException {
+			return this.delegate().read(buffer, offset, length);
+		}
+
+		@Override
+		public long skip(final long n) throws IOException {
+			return this.delegate().skip(n);
+		}
+
+		@Override
+		public int available() throws IOException {
+			return this.delegate().available();
+		}
+
+		@Override
+		public void close() throws IOException {
+			this.closed = true;
+			if (this.delegate != null) {
+				this.delegate.close();
+			}
+		}
 	}
 
 	public static SpriteResourceLoader wrap(final SpriteResourceLoader loader) {
@@ -120,10 +193,19 @@ public final class SpriteCache {
 
 	private static @Nullable SpriteContents load(final SpriteResourceLoader loader, final Identifier location, final Resource resource) {
 		Pending pending = new Pending();
+		Resource input = resource;
+		pending.source = sourceKey(resource);
+		if (pending.source != null) {
+			pending.known = SOURCES.get(pending.source);
+			if (pending.known != null) {
+				input = new Resource(resource.source(), () -> new DeferredStream(pending, resource), resource::metadata);
+			}
+		}
+
 		LOADING.set(pending);
 		SpriteContents contents;
 		try {
-			contents = loader.loadSprite(location, resource);
+			contents = loader.loadSprite(location, input);
 		} finally {
 			LOADING.remove();
 		}
@@ -142,6 +224,19 @@ public final class SpriteCache {
 		}
 
 		LOADING.remove();
+		if (pending.known != null && stream instanceof DeferredStream deferred && deferred.pending == pending) {
+			try {
+				if (serve(pending, pending.known)) {
+					stream.close();
+					HITS.incrementAndGet();
+					UNREAD.incrementAndGet();
+					return pending.image;
+				}
+			} catch (RuntimeException e) {
+				ResourcePackOptimizer.LOGGER.debug("Sprite cache failed, reading the sprite", e);
+			}
+		}
+
 		byte[] bytes;
 		try (stream) {
 			bytes = stream.readAllBytes();
@@ -151,6 +246,14 @@ public final class SpriteCache {
 		NativeImage image;
 		try {
 			Key key = key(bytes);
+			if (pending.source != null) {
+				if (SOURCES.size() >= MAX_SOURCES) {
+					SOURCES.clear();
+				}
+
+				SOURCES.put(pending.source, key);
+			}
+
 			entry = ENTRIES.get(key);
 			image = entry != null ? copyOriginal(entry) : null;
 			if (image == null) {
@@ -176,6 +279,65 @@ public final class SpriteCache {
 		pending.entry = entry;
 		pending.image = image;
 		return image;
+	}
+
+	private static boolean serve(final Pending pending, final Key key) {
+		Entry entry = ENTRIES.get(key);
+		NativeImage image = entry != null ? copyOriginal(entry) : null;
+		if (image == null) {
+			SpriteDiskCache.awaitIfStored(key);
+			entry = ENTRIES.get(key);
+			image = entry != null ? copyOriginal(entry) : null;
+		}
+
+		if (image == null) {
+			return false;
+		}
+
+		pending.entry = entry;
+		pending.image = image;
+		return true;
+	}
+
+	private static @Nullable SourceKey sourceKey(final Resource resource) {
+		if (!(((ResourceAccessor)resource).rpo$getStreamSupplier() instanceof ZipEntrySupplier supplier)) {
+			return null;
+		}
+
+		ZipEntry entry = supplier.entry();
+		if (entry.getCrc() < 0L || entry.getSize() < 0L || entry.getCompressedSize() < 0L) {
+			return null;
+		}
+
+		ZipId zip = zipId(supplier.zipFile());
+		return zip == null ? null : new SourceKey(zip, entry.getName(), entry.getCrc(), entry.getSize(), entry.getCompressedSize(), entry.getTime());
+	}
+
+	private static @Nullable ZipId zipId(final ZipFile zipFile) {
+		synchronized (ZIP_IDS) {
+			ZipId known = ZIP_IDS.get(zipFile);
+			if (known != null) {
+				return known == NO_ZIP_ID ? null : known;
+			}
+		}
+
+		ZipId id;
+		try {
+			Path path = Path.of(zipFile.getName());
+			BasicFileAttributes attributes = Files.readAttributes(path, BasicFileAttributes.class);
+			long modified = attributes.lastModifiedTime().toMillis();
+			id = System.currentTimeMillis() - modified > RACY_MILLIS
+				? new ZipId(path.toAbsolutePath().normalize().toString(), attributes.size(), modified)
+				: NO_ZIP_ID;
+		} catch (IOException | RuntimeException e) {
+			id = NO_ZIP_ID;
+		}
+
+		synchronized (ZIP_IDS) {
+			ZIP_IDS.put(zipFile, id);
+		}
+
+		return id == NO_ZIP_ID ? null : id;
 	}
 
 	private static @Nullable NativeImage copyOriginal(final Entry entry) {
@@ -297,13 +459,19 @@ public final class SpriteCache {
 		int generation = GENERATION.incrementAndGet();
 		if (ResourcePackOptimizer.LOGGER.isDebugEnabled() || ReloadTimeline.ENABLED) {
 			ResourcePackOptimizer.LOGGER.info(
-				"[selftest] sprite cache before reload {}: {} entries, {} MiB of {} MiB, decode hits {} / misses {}, mipmap hits {} / misses {}",
-				generation, ENTRIES.size(), BYTES.get() >> 20, BUDGET >> 20, HITS.getAndSet(0), MISSES.getAndSet(0), MIP_HITS.getAndSet(0), MIP_MISSES.getAndSet(0)
+				"[selftest] sprite cache before reload {}: {} entries, {} MiB of {} MiB, decode hits {} ({} unread) / misses {}, mipmap hits {} / misses {}",
+				generation, ENTRIES.size(), BYTES.get() >> 20, BUDGET >> 20, HITS.getAndSet(0), UNREAD.getAndSet(0), MISSES.getAndSet(0), MIP_HITS.getAndSet(0),
+				MIP_MISSES.getAndSet(0)
 			);
 		}
 	}
 
 	public static void clear() {
+		SOURCES.clear();
+		synchronized (ZIP_IDS) {
+			ZIP_IDS.clear();
+		}
+
 		for (Entry entry : ENTRIES.values()) {
 			if (ENTRIES.remove(entry.key, entry)) {
 				BYTES.addAndGet(-entry.close());
