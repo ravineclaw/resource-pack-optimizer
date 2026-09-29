@@ -357,6 +357,15 @@ public final class SpriteDiskCache {
 		});
 	}
 
+	public static void flush() {
+		CompletableFuture.runAsync(() -> {
+			if (enabled && RpoSettings.active()) {
+				PREFETCHED.join();
+				save();
+			}
+		}, SAVER).join();
+	}
+
 	public static void reloadStarted() {
 		SAVE_REQUEST.incrementAndGet();
 	}
