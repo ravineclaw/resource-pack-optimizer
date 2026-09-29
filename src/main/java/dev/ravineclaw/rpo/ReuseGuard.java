@@ -31,6 +31,9 @@ import net.minecraft.client.resources.model.ClientItemInfoLoader;
 import net.minecraft.client.resources.model.ModelBakery;
 import net.minecraft.client.resources.model.ModelDiscovery;
 import net.minecraft.client.resources.model.ModelManager;
+import net.minecraft.client.sounds.SoundBufferLibrary;
+import net.minecraft.client.sounds.SoundEngine;
+import net.minecraft.client.sounds.SoundManager;
 import org.jspecify.annotations.Nullable;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.Type;
@@ -69,6 +72,7 @@ public final class ReuseGuard {
 	);
 	public static final String[] FONTS = names(FontManager.class);
 	public static final String[] TEXTURES = names(TextureManager.class, ReloadableTexture.class, SimpleTexture.class, CubeMapTexture.class, TextureContents.class);
+	public static final String[] SOUNDS = names(SoundManager.class, SoundEngine.class, SoundBufferLibrary.class);
 	public static final String[] CHUNKS = names(LevelRenderer.class);
 
 	private ReuseGuard() {

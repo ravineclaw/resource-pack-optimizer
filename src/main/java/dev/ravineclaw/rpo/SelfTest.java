@@ -19,10 +19,12 @@ import net.minecraft.client.gui.screens.worldselection.SelectWorldScreen;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.texture.TextureAtlas;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
+import net.minecraft.client.resources.sounds.SoundInstance;
 import net.minecraft.data.AtlasIds;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.repository.PackRepository;
-import net.minecraft.world.Difficulty;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.LevelSettings;
 import net.minecraft.world.level.WorldDataConfiguration;
@@ -129,9 +131,32 @@ public final class SelfTest {
 		waitForChunks(minecraft, 180_000L);
 		log("world open with all chunks built: {} ms ({} sections)", (System.nanoTime() - start) / 1_000_000L, sections(minecraft));
 
+		SoundInstance record = CompletableFuture.supplyAsync(() -> {
+			SoundInstance instance = SimpleSoundInstance.forMusic(SoundEvents.MUSIC_DISC_CAT.value());
+			minecraft.getSoundManager().play(instance);
+			return instance;
+		}, minecraft).join();
+		long soundDeadline = System.currentTimeMillis() + 3_000L;
+		while (!CompletableFuture.supplyAsync(() -> minecraft.getSoundManager().isActive(record), minecraft).join() && System.currentTimeMillis() < soundDeadline) {
+			Thread.sleep(10L);
+		}
+
+		boolean playing = CompletableFuture.supplyAsync(() -> minecraft.getSoundManager().isActive(record), minecraft).join();
 		for (int i = 0; i < 2; i++) {
 			reload(minecraft, "world reload " + (i + 1), true);
 		}
+
+		if (playing) {
+			log(
+				"record still playing after two unchanged reloads: {} (expected true, sounds kept: {})",
+				CompletableFuture.supplyAsync(() -> minecraft.getSoundManager().isActive(record), minecraft).join(),
+				ReloadChanges.isUnchanged("sounds")
+			);
+		} else {
+			log("record didn't start (no sound device), skipping the sound check");
+		}
+
+		CompletableFuture.runAsync(() -> minecraft.getSoundManager().stop(record), minecraft).join();
 
 		togglePack(minecraft, SOUND_PACK);
 		togglePack(minecraft, TEXTURE_PACK);
