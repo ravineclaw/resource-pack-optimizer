@@ -7,6 +7,7 @@ import java.lang.reflect.Modifier;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
+import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.client.renderer.texture.TextureAtlas;
 import org.jspecify.annotations.Nullable;
 
@@ -22,6 +23,7 @@ public final class ModCompat {
 	}
 
 	private static final String FABRIC_SPRITE_FINDER = "net.fabricmc.fabric.api.client.renderer.v1.sprite.SpriteFinder";
+	private static final String IRIS_TEXTURE_TRACKER = "net.irisshaders.iris.pbr.TextureTracker";
 	private static final String SODIUM_SPRITE_FINDER_CACHE = "net.caffeinemc.mods.sodium.client.render.texture.SpriteFinderCache";
 	private static final Map<String, Rule> RULES = Map.ofEntries(
 		Map.entry("net.fabricmc.fabric.mixin.client.renderer.sprite.TextureAtlasMixin", new Rule(Set.of("uploadHook"), () -> fabricSpriteFinder() != null)),
@@ -72,7 +74,17 @@ public final class ModCompat {
 				Set.of("sectionStatistics", "setBlocksDirty", "setSectionDirtyWithNeighbors", "setBlockDirty", "setSectionDirty", "countRenderedSections"),
 				() -> true
 			)
-		)
+		),
+		Map.entry("net.irisshaders.iris.mixin.texture.MixinSpriteContents", new Rule(Set.of("redirectMipmapGeneration"), () -> true)),
+		Map.entry("net.irisshaders.iris.mixin.texture.pbr.MixinSpriteContents", new Rule(Set.of("onTailClose", "onTailMarkActive"), () -> true)),
+		Map.entry("net.irisshaders.iris.mixin.texture.MixinTextureManager", new Rule(Set.of("onTailReloadLambda", "onInnerDumpTextures", "onTailClose"), () -> true)),
+		Map.entry("net.irisshaders.iris.mixin.texture.pbr.MixinReloadableTexture", new Rule(Set.of("onDoLoad"), () -> true)),
+		Map.entry("net.irisshaders.iris.mixin.texture.pbr.MixinTextureAtlas", new Rule(Set.of("onTailCycleAnimationFrames", "onUpload"), () -> irisTracker() != null)),
+		Map.entry(
+			"net.irisshaders.iris.mixin.fabulous.MixinDisableFabulousGraphics",
+			new Rule(Set.of("disableFabulousGraphicsOnResourceReload", "disableFabulousGraphicsOnLevelRendererReload"), () -> true)
+		),
+		Map.entry("net.irisshaders.iris.mixin.MixinLevelRenderer_SkipRendering", new Rule(Set.of("skipRenderEntities"), () -> true))
 	);
 
 	private static volatile @Nullable Field fabricSpriteFinder;
@@ -80,7 +92,13 @@ public final class ModCompat {
 	private static volatile @Nullable SodiumHooks sodiumSpriteFinder;
 	private static volatile boolean sodiumSearched;
 
+	private static volatile @Nullable IrisHooks irisTracker;
+	private static volatile boolean irisSearched;
+
 	private record SodiumHooks(Method resetBlocks, Method resetItems, Field isBlocks) {
+	}
+
+	private record IrisHooks(Object tracker, Method track) {
 	}
 
 	private ModCompat() {
@@ -123,6 +141,40 @@ public final class ModCompat {
 			} catch (ReflectiveOperationException | RuntimeException e) {
 				ResourcePackOptimizer.LOGGER.warn("Couldn't reset Sodium's sprite finder of {}", atlas.location(), e);
 			}
+		}
+
+		IrisHooks iris = irisTracker();
+		if (iris != null) {
+			try {
+				Object texture = atlas.getTexture();
+				iris.track().invoke(iris.tracker(), texture.getClass().getMethod("iris$getGlId").invoke(texture), atlas);
+			} catch (ReflectiveOperationException | RuntimeException e) {
+				ResourcePackOptimizer.LOGGER.warn("Couldn't register {} with Iris", atlas.location(), e);
+			}
+		}
+	}
+
+	private static @Nullable IrisHooks irisTracker() {
+		if (!irisSearched) {
+			synchronized (ModCompat.class) {
+				if (!irisSearched) {
+					irisTracker = findIrisHooks();
+					irisSearched = true;
+				}
+			}
+		}
+
+		return irisTracker;
+	}
+
+	private static @Nullable IrisHooks findIrisHooks() {
+		try {
+			Class<?> tracker = Class.forName(IRIS_TEXTURE_TRACKER, false, ModCompat.class.getClassLoader());
+			Object instance = tracker.getField("INSTANCE").get(null);
+			Method track = tracker.getMethod("trackTexture", int.class, AbstractTexture.class);
+			return instance != null ? new IrisHooks(instance, track) : null;
+		} catch (ReflectiveOperationException | LinkageError | RuntimeException e) {
+			return null;
 		}
 	}
 
