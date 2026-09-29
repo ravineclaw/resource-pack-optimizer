@@ -2,6 +2,7 @@ package dev.ravineclaw.rpo.mixin;
 
 import dev.ravineclaw.rpo.PostChainReset;
 import dev.ravineclaw.rpo.ShaderCacheOwner;
+import dev.ravineclaw.rpo.RpoSettings;
 import net.minecraft.client.renderer.ShaderManager;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.util.profiling.ProfilerFiller;
@@ -38,6 +39,10 @@ public abstract class ShaderManagerMixin implements ShaderCacheOwner {
 			same = last != null && current != null && last.equals(preparations);
 		} catch (RuntimeException e) {
 			same = false;
+		}
+
+		if (!RpoSettings.active()) {
+			return;
 		}
 
 		if (same) {

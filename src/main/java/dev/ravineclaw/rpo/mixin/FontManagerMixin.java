@@ -3,6 +3,8 @@ package dev.ravineclaw.rpo.mixin;
 import dev.ravineclaw.rpo.InputRecording;
 import dev.ravineclaw.rpo.ListenerReuse;
 import dev.ravineclaw.rpo.ReuseGuard;
+import dev.ravineclaw.rpo.RpoSettings;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import net.minecraft.client.gui.font.FontManager;
@@ -39,14 +41,14 @@ public abstract class FontManagerMixin {
 			return;
 		}
 
-		if (!InputRecording.isTrackable(manager) || !ReuseGuard.untouched("fonts", ReuseGuard.FONTS)) {
+		if (!RpoSettings.active() || !InputRecording.isTrackable(manager) || !ReuseGuard.untouched("fonts", ReuseGuard.FONTS)) {
 			this.rpo$applied = null;
 			this.rpo$pending = null;
 			return;
 		}
 
 		FontManager self = (FontManager)(Object)this;
-		cir.setReturnValue(ListenerReuse.inputsUnchanged(this.rpo$applied, manager, taskExecutor).thenCompose(keep -> {
+		cir.setReturnValue(ListenerReuse.inputsMatch(this.rpo$applied, manager, taskExecutor).thenCompose(keep -> {
 			if (keep) {
 				return preparationBarrier.wait(Unit.INSTANCE).thenAcceptAsync(unused -> {
 				}, reloadExecutor);
