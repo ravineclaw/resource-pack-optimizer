@@ -24,16 +24,21 @@ public final class ModCompat {
 	}
 
 	private static final String FABRIC_SPRITE_FINDER = "net.fabricmc.fabric.api.renderer.v1.model.SpriteFinder";
+	private static final String FABRIC_SPRITE_FINDER_IMPL = "net.fabricmc.fabric.impl.renderer.SpriteFinderImpl";
 	private static final String IRIS_TEXTURE_TRACKER = "net.irisshaders.iris.pbr.TextureTracker";
 	private static final String SODIUM_SPRITE_FINDER_CACHE = "net.caffeinemc.mods.sodium.client.render.texture.SpriteFinderCache";
 	private static final Map<String, Rule> RULES = Map.ofEntries(
 		Map.entry("net.fabricmc.fabric.mixin.renderer.client.sprite.SpriteAtlasTextureMixin", new Rule(Set.of("uploadHook"), () -> fabricSpriteFinder() != null)),
+		Map.entry("net.fabricmc.fabric.mixin.renderer.client.SpriteAtlasTextureMixin", new Rule(Set.of("uploadHook"), () -> fabricSpriteFinder() != null)),
+		Map.entry("net.fabricmc.fabric.mixin.client.model.loading.ModelBakerBakerImplMixin", new Rule(Set.of("wrapModelBake"), ModCompat::noModelPlugins)),
+		Map.entry("net.fabricmc.fabric.mixin.client.model.loading.ReferencedModelsCollectorMixin", new Rule(Set.of("onReturnInit", "onLoadModel"), ModCompat::noModelPlugins)),
 		Map.entry(
 			"net.fabricmc.fabric.mixin.client.model.loading.BakedModelManagerMixin",
 			new Rule(
 				Set.of(
 					"onHeadReload",
 					"resetEventDispatcherFuture",
+					"hookModelDiscovery",
 					"hookModels",
 					"hookBlockStateModels",
 					"hookModelCollect",
@@ -50,7 +55,7 @@ public final class ModCompat {
 		),
 		Map.entry(
 			"net.fabricmc.fabric.mixin.client.model.loading.ModelBakerMixin",
-			new Rule(Set.of("onReturnInit", "hookBlockModelBake", "withExtraModels", "wrapBlockModelBake", "wrapItemModelBake"), ModCompat::noModelPlugins)
+			new Rule(Set.of("onReturnInit", "onReturnBake", "hookBlockModelBake", "withExtraModels", "wrapBlockModelBake", "wrapItemModelBake"), ModCompat::noModelPlugins)
 		),
 		Map.entry(
 			"net.fabricmc.fabric.mixin.client.rendering.WorldRendererMixin",
@@ -203,7 +208,8 @@ public final class ModCompat {
 		if (!fabricSearched) {
 			synchronized (ModCompat.class) {
 				if (!fabricSearched) {
-					fabricSpriteFinder = onlyField(FABRIC_SPRITE_FINDER, null);
+					Field field = onlyField(FABRIC_SPRITE_FINDER, null);
+					fabricSpriteFinder = field != null ? field : onlyField(FABRIC_SPRITE_FINDER_IMPL, null);
 					fabricSearched = true;
 				}
 			}
