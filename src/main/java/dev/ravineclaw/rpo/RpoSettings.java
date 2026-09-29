@@ -43,6 +43,7 @@ public final class RpoSettings {
 		if (want) {
 			ResourcePackOptimizer.LOGGER.info("Resource Pack Optimizer turned on");
 			SpriteDiskCache.enable();
+			SpirvDiskCache.enable();
 		} else {
 			ResourcePackOptimizer.LOGGER.info("Resource Pack Optimizer turned off, reloading like vanilla");
 			AtlasReuse.clear();
@@ -50,6 +51,7 @@ public final class RpoSettings {
 			AtlasStaging.discardAll();
 			SpriteCache.clear();
 			SpirvCache.clear();
+			SpirvDiskCache.clear();
 			SpriteDiskCache.deleteLater();
 		}
 	}

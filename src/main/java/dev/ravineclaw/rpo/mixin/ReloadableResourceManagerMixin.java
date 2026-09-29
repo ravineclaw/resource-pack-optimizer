@@ -3,6 +3,7 @@ package dev.ravineclaw.rpo.mixin;
 import dev.ravineclaw.rpo.PackFingerprints;
 import dev.ravineclaw.rpo.ReloadChanges;
 import dev.ravineclaw.rpo.RpoSettings;
+import dev.ravineclaw.rpo.SpirvDiskCache;
 import dev.ravineclaw.rpo.SpriteCache;
 import dev.ravineclaw.rpo.SpriteDiskCache;
 import java.util.List;
@@ -49,6 +50,9 @@ public abstract class ReloadableResourceManagerMixin {
 		final List<PackResources> resourcePacks,
 		final CallbackInfoReturnable<ReloadInstance> cir
 	) {
-		cir.getReturnValue().done().whenComplete((result, error) -> SpriteDiskCache.reloadFinished());
+		cir.getReturnValue().done().whenComplete((result, error) -> {
+			SpriteDiskCache.reloadFinished();
+			SpirvDiskCache.reloadFinished();
+		});
 	}
 }

@@ -21,6 +21,6 @@ public abstract class GlslCompilerMixin {
 		final ShaderSource shaderSource,
 		final Operation<SpvModule> original
 	) throws Exception {
-		return SpirvCache.compile(this, name, source, type, shaderDefines, shaderSource, () -> original.call(name, source, type, shaderDefines, shaderSource));
+		return SpirvCache.compile(this, name, source, type, shaderDefines, shaderSource, using -> original.call(name, source, type, shaderDefines, using));
 	}
 }
