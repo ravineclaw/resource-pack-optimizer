@@ -9,10 +9,13 @@ public class ResourcePackOptimizer implements ClientModInitializer {
 
 	@Override
 	public void onInitializeClient() {
-		if (RpoSettings.disabledThisSession()) {
-			LOGGER.info("Resource Pack Optimizer is turned off for this session");
+		if (!RpoSettings.active()) {
+			LOGGER.info("Resource Pack Optimizer is turned off");
+		} else {
+			SpriteDiskCache.prefetch();
 		}
 
 		SelfTest.startIfRequested();
+		Benchmark.startIfRequested();
 	}
 }

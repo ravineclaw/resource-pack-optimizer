@@ -8,8 +8,11 @@ import dev.ravineclaw.rpo.AtlasBuilder;
 import dev.ravineclaw.rpo.AtlasReuse;
 import dev.ravineclaw.rpo.AtlasStaging;
 import dev.ravineclaw.rpo.FramePump;
+import dev.ravineclaw.rpo.ModCompat;
 import dev.ravineclaw.rpo.ReloadChanges;
 import dev.ravineclaw.rpo.ResourcePackOptimizer;
+import dev.ravineclaw.rpo.RpoSettings;
+import dev.ravineclaw.rpo.TerrainHandoff;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -56,7 +59,17 @@ public abstract class TextureAtlasMixin extends AbstractTexture {
 	private boolean rpo$tilesUploaded;
 
 	@Inject(method = "upload", at = @At("HEAD"), cancellable = true)
-	private void rpo$skipUnchanged(final SpriteLoader.Preparations preparations, final CallbackInfo ci) {
+	private void rpo$takePrebuilt(final SpriteLoader.Preparations preparations, final CallbackInfo ci) {
+		if (this.rpo$prebuilt != null) {
+			this.rpo$prebuilt.close();
+			this.rpo$prebuilt = null;
+		}
+
+		if (!RpoSettings.active()) {
+			AtlasReuse.forget(this.location);
+			return;
+		}
+
 		if (AtlasReuse.isUploaded(this.location, preparations)) {
 			ReloadChanges.unchanged("atlas:" + this.location);
 			ci.cancel();
@@ -83,6 +96,7 @@ public abstract class TextureAtlasMixin extends AbstractTexture {
 	}
 
 	@Unique
+	@SuppressWarnings("deprecation")
 	private boolean rpo$swapIn(final AtlasStaging.Staged staged, final SpriteLoader.Preparations preparations) {
 		Map<ResourceLocation, TextureAtlasSprite> byName = Map.copyOf(preparations.regions());
 		TextureAtlasSprite missing = byName.get(MissingTextureAtlasSprite.getLocation());
@@ -102,12 +116,18 @@ public abstract class TextureAtlasMixin extends AbstractTexture {
 
 		List<AutoCloseable> old = new ArrayList<>(this.sprites);
 		old.addAll(this.animatedTextures);
-		if (this.textureView != null) {
-			old.add(this.textureView);
-		}
+		boolean handedOff = this.location.equals(TextureAtlas.LOCATION_BLOCKS)
+			&& this.texture != null
+			&& this.textureView != null
+			&& TerrainHandoff.offer(this.texture, this.textureView);
+		if (!handedOff) {
+			if (this.textureView != null) {
+				old.add(this.textureView);
+			}
 
-		if (this.texture != null) {
-			old.add(this.texture);
+			if (this.texture != null) {
+				old.add(this.texture);
+			}
 		}
 
 		this.texture = staged.texture();
@@ -120,6 +140,7 @@ public abstract class TextureAtlasMixin extends AbstractTexture {
 		this.missingSprite = missing;
 		this.sprites = List.copyOf(contents);
 		this.animatedTextures = List.copyOf(tickers);
+		ModCompat.atlasSwapped((TextureAtlas)(Object)this);
 		FramePump.closeLater(old);
 		return true;
 	}
@@ -147,7 +168,9 @@ public abstract class TextureAtlasMixin extends AbstractTexture {
 	@Inject(method = "upload", at = @At("RETURN"))
 	private void rpo$rememberUpload(final SpriteLoader.Preparations preparations, final CallbackInfo ci) {
 		this.rpo$releasePrebuilt();
-		AtlasReuse.uploadFinished(this.location, preparations);
+		if (RpoSettings.active()) {
+			AtlasReuse.uploadFinished(this.location, preparations);
+		}
 	}
 
 	@Inject(method = "clearTextureData", at = @At("HEAD"))

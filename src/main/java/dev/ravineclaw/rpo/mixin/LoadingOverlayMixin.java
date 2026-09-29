@@ -4,6 +4,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import dev.ravineclaw.rpo.BackgroundReload;
 import dev.ravineclaw.rpo.ReloadChanges;
+import dev.ravineclaw.rpo.RpoSettings;
 import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.function.IntSupplier;
@@ -48,7 +49,7 @@ public abstract class LoadingOverlayMixin {
 
 	@ModifyConstant(method = "render", constant = @Constant(floatValue = 1000.0F))
 	private float rpo$noFadeOut(final float original) {
-		return 1.0F;
+		return RpoSettings.active() ? 1.0F : original;
 	}
 
 	@WrapOperation(method = "render", at = @At(value = "INVOKE", target = "Ljava/util/function/Consumer;accept(Ljava/lang/Object;)V"))
@@ -62,12 +63,12 @@ public abstract class LoadingOverlayMixin {
 
 	@Redirect(method = "render", at = @At(value = "INVOKE", target = "Ljava/util/function/IntSupplier;getAsInt()I"))
 	private int rpo$blackBackground(final IntSupplier brandBackground) {
-		return ARGB.color(255, 0, 0, 0);
+		return RpoSettings.active() ? ARGB.color(255, 0, 0, 0) : brandBackground.getAsInt();
 	}
 
 	@Inject(method = "render", at = @At("HEAD"), cancellable = true)
 	private void rpo$inGameReload(final GuiGraphics graphics, final int mouseX, final int mouseY, final float a, final CallbackInfo ci) {
-		if (!this.fadeIn) {
+		if (!this.fadeIn || !RpoSettings.active() && !BackgroundReload.isCurrent(this)) {
 			return;
 		}
 

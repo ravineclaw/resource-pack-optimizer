@@ -1,6 +1,10 @@
 package dev.ravineclaw.rpo.mixin;
 
+import dev.ravineclaw.rpo.PackFingerprints;
 import dev.ravineclaw.rpo.ReloadChanges;
+import dev.ravineclaw.rpo.RpoSettings;
+import dev.ravineclaw.rpo.SpriteCache;
+import dev.ravineclaw.rpo.SpriteDiskCache;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
@@ -30,6 +34,23 @@ public abstract class ReloadableResourceManagerMixin {
 		final List<PackResources> resourcePacks,
 		final CallbackInfoReturnable<ReloadInstance> cir
 	) {
+		RpoSettings.beginReload();
+		PackFingerprints.newReload();
 		ReloadChanges.begin(this.listeners);
+		SpriteCache.newGeneration();
+		SpriteDiskCache.reloadStarted();
+	}
+
+	@Inject(method = "createReload", at = @At("RETURN"))
+	private void rpo$endReload(
+		final Executor backgroundExecutor,
+		final Executor mainThreadExecutor,
+		final CompletableFuture<Unit> initialTask,
+		final List<PackResources> resourcePacks,
+		final CallbackInfoReturnable<ReloadInstance> cir
+	) {
+		cir.getReturnValue().done().whenComplete((result, error) -> {
+			SpriteDiskCache.reloadFinished();
+		});
 	}
 }
