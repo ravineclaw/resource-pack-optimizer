@@ -210,7 +210,7 @@ public final class SpriteCache {
 			LOADING.remove();
 		}
 
-		if (contents != null && pending.entry != null && ((CachedSprite)contents).rpo$originalImage() == pending.image) {
+		if (contents != null && contents.getClass() == SpriteContents.class && pending.entry != null && ((CachedSprite)contents).rpo$originalImage() == pending.image) {
 			((CachedSprite)contents).rpo$setCacheEntry(pending.entry);
 		}
 

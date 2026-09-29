@@ -127,14 +127,15 @@ public final class ReuseGuard {
 		}
 	}
 
-	private static @Nullable String handlerName(final String name) {
-		String[] parts = name.split("[$]", 4);
+	private static @Nullable String handlerName(final String merged) {
+		String[] parts = merged.split("[$]", 4);
 		if (parts.length < 4) {
 			return null;
 		}
 
 		int bridge = parts[3].indexOf("$mixinextras$");
-		return bridge < 0 ? parts[3] : parts[3].substring(0, bridge);
+		String name = bridge < 0 ? parts[3] : parts[3].substring(0, bridge);
+		return name.substring(name.lastIndexOf('$') + 1);
 	}
 
 	private static Set<String> vanillaMethods(final ClassLoader loader, final String className) throws IOException {

@@ -69,6 +69,9 @@ dependencies {
 	if (project.hasProperty("rpoSodium")) {
 		runtimeOnly "maven.modrinth:sodium:${project.findProperty('rpoSodium')}"
 	}
+	if (project.hasProperty("rpoIris")) {
+		runtimeOnly "maven.modrinth:iris:${project.findProperty('rpoIris')}"
+	}
 	if (project.hasProperty("rpoFabricApi")) {
 		runtimeOnly "net.fabricmc.fabric-api:fabric-api:${project.findProperty('rpoFabricApi')}"
 	}
