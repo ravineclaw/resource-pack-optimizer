@@ -27,6 +27,7 @@ import net.minecraft.client.resources.sounds.SoundInstance;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.repository.PackRepository;
 import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.GameType;
@@ -136,6 +137,11 @@ public final class SelfTest {
 		waitForChunks(minecraft, 180_000L);
 		log("world open with all chunks built: {} ms ({} sections)", (System.nanoTime() - start) / 1_000_000L, sections(minecraft));
 
+		double master = minecraft.options.getSoundSourceOptionInstance(SoundSource.MASTER).get();
+		if (master <= 0.0D) {
+			CompletableFuture.runAsync(() -> minecraft.options.getSoundSourceOptionInstance(SoundSource.MASTER).set(0.0001D), minecraft).join();
+		}
+
 		SoundInstance record = CompletableFuture.supplyAsync(() -> {
 			SoundInstance instance = SimpleSoundInstance.forMusic(SoundEvents.MUSIC_DISC_CAT.value());
 			minecraft.getSoundManager().play(instance);
@@ -161,7 +167,10 @@ public final class SelfTest {
 			log("record didn't start (no sound device), skipping the sound check");
 		}
 
-		CompletableFuture.runAsync(() -> minecraft.getSoundManager().stop(record), minecraft).join();
+		CompletableFuture.runAsync(() -> {
+			minecraft.getSoundManager().stop(record);
+			minecraft.options.getSoundSourceOptionInstance(SoundSource.MASTER).set(master);
+		}, minecraft).join();
 
 		togglePack(minecraft, SOUND_PACK);
 		togglePack(minecraft, TEXTURE_PACK);
