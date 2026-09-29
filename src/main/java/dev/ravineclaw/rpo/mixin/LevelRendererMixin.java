@@ -1,7 +1,7 @@
 package dev.ravineclaw.rpo.mixin;
 
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
-import com.mojang.renderpearl.api.textures.GpuTextureView;
+import com.mojang.blaze3d.textures.GpuTextureView;
 import dev.ravineclaw.rpo.TerrainHandoff;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import net.minecraft.client.Camera;

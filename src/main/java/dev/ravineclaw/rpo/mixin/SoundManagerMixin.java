@@ -11,8 +11,7 @@ import java.util.Set;
 import net.minecraft.client.sounds.SoundEngine;
 import net.minecraft.client.sounds.SoundManager;
 import net.minecraft.resources.Identifier;
-import net.minecraft.server.packs.FixedPathPackResources;
-import net.minecraft.server.packs.OverlayedPackResources;
+import net.minecraft.server.packs.CompositePackResources;
 import net.minecraft.server.packs.PackResources;
 import net.minecraft.server.packs.PathPackResources;
 import net.minecraft.server.packs.resources.Resource;
@@ -95,12 +94,12 @@ public abstract class SoundManagerMixin {
 
 	@Unique
 	private static boolean rpo$survivesClose(final PackResources pack) {
-		if (pack instanceof PathPackResources || pack instanceof FixedPathPackResources) {
+		if (pack instanceof PathPackResources) {
 			return true;
 		}
 
-		if (pack instanceof OverlayedPackResources overlayed) {
-			for (PackResources layer : ((OverlayedPackResourcesAccessor)overlayed).rpo$getPackResourcesStack()) {
+		if (pack instanceof CompositePackResources overlayed) {
+			for (PackResources layer : ((CompositePackResourcesAccessor)overlayed).rpo$getPackResourcesStack()) {
 				if (!rpo$survivesClose(layer)) {
 					return false;
 				}

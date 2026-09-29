@@ -13,7 +13,6 @@ public class ResourcePackOptimizer implements ClientModInitializer {
 			LOGGER.info("Resource Pack Optimizer is turned off");
 		} else {
 			SpriteDiskCache.prefetch();
-			SpirvDiskCache.prefetch();
 		}
 
 		SelfTest.startIfRequested();
