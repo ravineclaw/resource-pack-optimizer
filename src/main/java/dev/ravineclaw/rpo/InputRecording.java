@@ -169,22 +169,30 @@ public final class InputRecording {
 
 	private static long @Nullable [] signature(final PackStack stack, final Identifier id, final LongArrayList scratch) {
 		scratch.clear();
-		appendSignature(stack.rpo$packs(), stack.rpo$filters(), stack.rpo$type(), id, scratch);
+		appendSignature(stack, id, scratch);
 		return scratch.contains(PackFingerprints.UNKNOWN) ? null : scratch.toLongArray();
 	}
 
-	private static void appendSignature(final List<PackResources> packs, final List<String> filters, final PackType type, final Identifier id, final LongArrayList out) {
+	private static void appendSignature(final PackStack stack, final Identifier id, final LongArrayList out) {
+		PackFingerprints.StackSources sources = stack.rpo$sources();
+		if (sources == null) {
+			sources = PackFingerprints.sources(stack.rpo$packs(), stack.rpo$type(), stack.rpo$filters());
+			stack.rpo$setSources(sources);
+		}
+
+		PackType type = stack.rpo$type();
 		Identifier metadata = id.withPath(id.getPath() + ".mcmeta");
+		String path = id.getNamespace() + "/" + id.getPath();
+		String metadataPath = path + ".mcmeta";
 		int filterIndex = 0;
-		for (int i = 0; i < packs.size(); i++) {
-			boolean filtered = !filters.get(i).isEmpty();
-			if (filtered) {
+		for (int i : sources.candidates(id.getNamespace())) {
+			if (sources.filtered(i)) {
 				out.add(FILTER_MARKER - filterIndex++);
 			}
 
 			int mark = out.size();
-			PackFingerprints.append(packs.get(i), type, id, out);
-			PackFingerprints.append(packs.get(i), type, metadata, out);
+			sources.append(i, type, id, path, out);
+			sources.append(i, type, metadata, metadataPath, out);
 			boolean present = false;
 			for (int j = mark; j < out.size(); j++) {
 				present |= out.getLong(j) != PackFingerprints.ABSENT;
@@ -203,7 +211,7 @@ public final class InputRecording {
 		Arrays.sort(sorted);
 		scratch.clear();
 		for (Identifier id : sorted) {
-			appendSignature(stack.rpo$packs(), stack.rpo$filters(), stack.rpo$type(), id, scratch);
+			appendSignature(stack, id, scratch);
 		}
 
 		return scratch.contains(PackFingerprints.UNKNOWN) ? null : new Listing(sorted, scratch.toLongArray());
@@ -227,7 +235,7 @@ public final class InputRecording {
 			int position = 0;
 			for (Identifier id : sorted) {
 				scratch.clear();
-				appendSignature(stack.rpo$packs(), stack.rpo$filters(), stack.rpo$type(), id, scratch);
+				appendSignature(stack, id, scratch);
 				int length = scratch.size();
 				if (position + length > this.signatures.length
 					|| scratch.contains(PackFingerprints.UNKNOWN)

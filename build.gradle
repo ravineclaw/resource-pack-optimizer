@@ -60,6 +60,9 @@ dependencies {
 	compileOnly("com.terraformersmc:modmenu:${project.modmenu_version}") {
 		transitive = false
 	}
+	if (project.hasProperty("rpoFabricApi")) {
+		runtimeOnly "net.fabricmc.fabric-api:fabric-api:${project.findProperty('rpoFabricApi')}"
+	}
 }
 
 processResources {
