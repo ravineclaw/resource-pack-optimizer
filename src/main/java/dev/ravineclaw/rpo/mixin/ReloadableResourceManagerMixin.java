@@ -1,5 +1,6 @@
 package dev.ravineclaw.rpo.mixin;
 
+import dev.ravineclaw.rpo.PackFingerprints;
 import dev.ravineclaw.rpo.ReloadChanges;
 import dev.ravineclaw.rpo.RpoSettings;
 import dev.ravineclaw.rpo.SpriteCache;
@@ -34,6 +35,7 @@ public abstract class ReloadableResourceManagerMixin {
 		final CallbackInfoReturnable<ReloadInstance> cir
 	) {
 		RpoSettings.beginReload();
+		PackFingerprints.newReload();
 		ReloadChanges.begin(this.listeners);
 		SpriteCache.newGeneration();
 		SpriteDiskCache.reloadStarted();

@@ -3,11 +3,14 @@ package dev.ravineclaw.rpo;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
+import org.jspecify.annotations.Nullable;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.ClassNode;
@@ -15,10 +18,14 @@ import org.objectweb.asm.tree.MethodNode;
 import org.spongepowered.asm.mixin.transformer.meta.MixinMerged;
 
 public final class ReuseGuard {
+	private record Foreign(String mixin, @Nullable String handler) {
+	}
+
 	private static final String OWN_MIXINS = "dev.ravineclaw.rpo.mixin.";
 	private static final Pattern INJECTED_HANDLER = Pattern.compile("^[A-Za-z]+\\$[a-z]{3}[0-9a-f]{3}\\$");
 	private static final Set<String> REPORTED = ConcurrentHashMap.newKeySet();
-	private static final Map<String, String> FOREIGN = new ConcurrentHashMap<>();
+	private static final Map<String, List<Foreign>> FOREIGN = new ConcurrentHashMap<>();
+	private static final List<Foreign> UNKNOWN = List.of(new Foreign("an unknown mixin", null));
 
 	public static final String[] ATLASES = {
 		"net.minecraft.client.renderer.texture.SpriteLoader",
@@ -59,10 +66,19 @@ public final class ReuseGuard {
 	public static boolean untouched(final String what, final String... classNames) {
 		try {
 			for (String className : classNames) {
-				String mixin = FOREIGN.computeIfAbsent(className, ReuseGuard::findForeignMixin);
-				if (!mixin.isEmpty()) {
-					if (REPORTED.add(what + "|" + mixin)) {
-						ResourcePackOptimizer.LOGGER.info("Not reusing unchanged {} between reloads: {} modifies {}", what, mixin, className);
+				for (Foreign foreign : FOREIGN.computeIfAbsent(className, ReuseGuard::findForeignMixins)) {
+					if (FabricCompat.tolerates(foreign.mixin(), foreign.handler())) {
+						continue;
+					}
+
+					if (REPORTED.add(what + "|" + foreign.mixin())) {
+						ResourcePackOptimizer.LOGGER.info(
+							"Not reusing unchanged {} between reloads: {} modifies {}{}",
+							what,
+							foreign.mixin(),
+							className,
+							foreign.handler() != null ? " (" + foreign.handler() + ")" : ""
+						);
 					}
 
 					return false;
@@ -79,11 +95,12 @@ public final class ReuseGuard {
 		}
 	}
 
-	private static String findForeignMixin(final String className) {
+	private static List<Foreign> findForeignMixins(final String className) {
 		try {
 			ClassLoader loader = ReuseGuard.class.getClassLoader();
 			Class<?> target = Class.forName(className, false, loader);
 			Set<String> vanilla = null;
+			List<Foreign> found = new ArrayList<>();
 			for (Method method : target.getDeclaredMethods()) {
 				MixinMerged merged = method.getAnnotation(MixinMerged.class);
 				if (merged == null || merged.mixin().startsWith(OWN_MIXINS)) {
@@ -91,7 +108,9 @@ public final class ReuseGuard {
 				}
 
 				if (INJECTED_HANDLER.matcher(method.getName()).find()) {
-					return merged.mixin();
+					String[] parts = method.getName().split("[$]");
+					found.add(new Foreign(merged.mixin(), parts.length > 3 ? parts[3] : null));
+					continue;
 				}
 
 				if (vanilla == null) {
@@ -99,13 +118,13 @@ public final class ReuseGuard {
 				}
 
 				if (vanilla.contains(method.getName() + Type.getMethodDescriptor(method))) {
-					return merged.mixin();
+					found.add(new Foreign(merged.mixin(), null));
 				}
 			}
 
-			return "";
+			return List.copyOf(found);
 		} catch (ReflectiveOperationException | LinkageError | IOException | RuntimeException e) {
-			return "an unknown mixin";
+			return UNKNOWN;
 		}
 	}
 
