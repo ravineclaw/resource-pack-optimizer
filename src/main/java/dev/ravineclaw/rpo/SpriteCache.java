@@ -6,6 +6,7 @@ import com.mojang.blaze3d.platform.TextureUtil;
 import dev.ravineclaw.rpo.mixin.ResourceAccessor;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -212,6 +213,16 @@ public final class SpriteCache {
 		return contents;
 	}
 
+	private static NativeImage decode(final byte[] bytes) throws IOException {
+		ByteBuffer buffer = MemoryUtil.memAlloc(bytes.length);
+		try {
+			buffer.put(bytes).rewind();
+			return NativeImage.read(buffer);
+		} finally {
+			MemoryUtil.memFree(buffer);
+		}
+	}
+
 	public static @Nullable NativeImage read(final InputStream stream) throws IOException {
 		Pending pending = LOADING.get();
 		if (pending == null) {
@@ -261,14 +272,14 @@ public final class SpriteCache {
 				HITS.incrementAndGet();
 			} else {
 				MISSES.incrementAndGet();
-				image = NativeImage.read(bytes);
+				image = decode(bytes);
 				entry = store(key, image);
 			}
 		} catch (IOException e) {
 			throw e;
 		} catch (RuntimeException e) {
 			ResourcePackOptimizer.LOGGER.debug("Sprite cache failed, decoding normally", e);
-			return NativeImage.read(bytes);
+			return decode(bytes);
 		}
 
 		pending.entry = entry;
