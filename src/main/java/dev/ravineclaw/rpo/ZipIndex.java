@@ -10,6 +10,7 @@ import java.util.NoSuchElementException;
 import java.util.WeakHashMap;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
+import org.jetbrains.annotations.Nullable;
 
 public final class ZipIndex {
 	private static final Map<ZipFile, ZipIndex> INDEXES = new WeakHashMap<>();
@@ -17,6 +18,7 @@ public final class ZipIndex {
 	private final String[] names;
 	private final ZipEntry[] entries;
 	private final long contentHash;
+	private final boolean duplicates;
 
 	private ZipIndex(final ZipFile zipFile) {
 		List<ZipEntry> all = new ArrayList<>(zipFile.size());
@@ -40,6 +42,25 @@ public final class ZipIndex {
 		}
 
 		this.contentHash = hash;
+		boolean duplicates = false;
+		for (int i = 1; i < this.names.length; i++) {
+			duplicates |= this.names[i].equals(this.names[i - 1]);
+		}
+
+		this.duplicates = duplicates;
+	}
+
+	public @Nullable ZipEntry entry(final ZipFile zipFile, final String name) {
+		if (this.duplicates) {
+			return zipFile.getEntry(name);
+		}
+
+		int index = Arrays.binarySearch(this.names, name);
+		if (index < 0 && !name.endsWith("/")) {
+			index = Arrays.binarySearch(this.names, name + "/");
+		}
+
+		return index < 0 ? null : this.entries[index];
 	}
 
 	public long contentHash() {
