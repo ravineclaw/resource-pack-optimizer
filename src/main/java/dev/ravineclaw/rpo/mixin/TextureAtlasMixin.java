@@ -4,8 +4,10 @@ import dev.ravineclaw.rpo.AtlasBuilder;
 import dev.ravineclaw.rpo.AtlasReuse;
 import dev.ravineclaw.rpo.AtlasStaging;
 import dev.ravineclaw.rpo.FramePump;
+import dev.ravineclaw.rpo.ModCompat;
 import dev.ravineclaw.rpo.ReloadChanges;
 import dev.ravineclaw.rpo.ResourcePackOptimizer;
+import dev.ravineclaw.rpo.RpoSettings;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -54,6 +56,16 @@ public abstract class TextureAtlasMixin extends AbstractTexture {
 	@Inject(method = "upload", at = @At("HEAD"), cancellable = true)
 	private void rpo$takePrebuilt(final SpriteLoader.Preparations preparations, final CallbackInfo ci) {
 		this.rpo$tilesUploaded = false;
+		if (this.rpo$prebuilt != null) {
+			this.rpo$prebuilt.close();
+			this.rpo$prebuilt = null;
+		}
+
+		if (!RpoSettings.active()) {
+			AtlasReuse.forget(this.location);
+			return;
+		}
+
 		if (AtlasReuse.isUploaded(this.location, preparations)) {
 			ReloadChanges.unchanged("atlas:" + this.location);
 			ci.cancel();
@@ -61,11 +73,6 @@ public abstract class TextureAtlasMixin extends AbstractTexture {
 		}
 
 		AtlasReuse.uploadStarted(this.location);
-		if (this.rpo$prebuilt != null) {
-			this.rpo$prebuilt.close();
-			this.rpo$prebuilt = null;
-		}
-
 		AtlasStaging.Staged staged = AtlasStaging.take(
 			this.location, preparations.regions(), preparations.width(), preparations.height(), preparations.mipLevel()
 		);
@@ -83,6 +90,7 @@ public abstract class TextureAtlasMixin extends AbstractTexture {
 	}
 
 	@Unique
+	@SuppressWarnings("deprecation")
 	private boolean rpo$swapIn(final AtlasStaging.Staged staged, final SpriteLoader.Preparations preparations) {
 		Map<ResourceLocation, TextureAtlasSprite> byName = Map.copyOf(preparations.regions());
 		TextureAtlasSprite missing = byName.get(MissingTextureAtlasSprite.getLocation());
@@ -115,6 +123,7 @@ public abstract class TextureAtlasMixin extends AbstractTexture {
 		this.missingSprite = missing;
 		this.sprites = List.copyOf(contents);
 		this.animatedTextures = List.copyOf(tickers);
+		ModCompat.atlasSwapped((TextureAtlas)(Object)this);
 		FramePump.closeLater(old);
 		return true;
 	}
@@ -170,7 +179,14 @@ public abstract class TextureAtlasMixin extends AbstractTexture {
 	@Inject(method = "upload", at = @At("RETURN"))
 	private void rpo$rememberUpload(final SpriteLoader.Preparations preparations, final CallbackInfo ci) {
 		this.rpo$tilesUploaded = false;
-		AtlasReuse.uploadFinished(this.location, preparations);
+		if (this.rpo$prebuilt != null) {
+			this.rpo$prebuilt.close();
+			this.rpo$prebuilt = null;
+		}
+
+		if (RpoSettings.active()) {
+			AtlasReuse.uploadFinished(this.location, preparations);
+		}
 	}
 
 	@Inject(method = "clearTextureData", at = @At("HEAD"))

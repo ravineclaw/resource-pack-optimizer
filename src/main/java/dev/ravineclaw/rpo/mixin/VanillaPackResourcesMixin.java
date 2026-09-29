@@ -1,6 +1,8 @@
 package dev.ravineclaw.rpo.mixin;
 
+import dev.ravineclaw.rpo.FixedFileSupplier;
 import dev.ravineclaw.rpo.ImmutablePack;
+import dev.ravineclaw.rpo.RpoSettings;
 import java.io.InputStream;
 import java.nio.file.FileSystems;
 import java.nio.file.Path;
@@ -14,6 +16,7 @@ import net.minecraft.server.packs.PackResources;
 import net.minecraft.server.packs.PackType;
 import net.minecraft.server.packs.VanillaPackResources;
 import net.minecraft.server.packs.resources.IoSupplier;
+import org.jspecify.annotations.Nullable;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -37,6 +40,8 @@ public abstract class VanillaPackResourcesMixin implements ImmutablePack {
 
 	@Unique
 	private volatile Boolean rpo$immutable;
+	@Unique
+	private volatile @Nullable Optional<String> rpo$origin;
 	@Unique
 	private final Map<String, List<Map.Entry<ResourceLocation, IoSupplier<InputStream>>>> rpo$listings = new ConcurrentHashMap<>();
 	@Unique
@@ -70,11 +75,26 @@ public abstract class VanillaPackResourcesMixin implements ImmutablePack {
 		return immutable;
 	}
 
+	@Unique
+	private @Nullable IoSupplier<InputStream> rpo$identify(final PackType type, final ResourceLocation id, final @Nullable IoSupplier<InputStream> supplier) {
+		if (supplier == null) {
+			return null;
+		}
+
+		Optional<String> origin = this.rpo$origin;
+		if (origin == null) {
+			origin = Optional.ofNullable(FixedFileSupplier.origin(((PackResources)(Object)this).packId()));
+			this.rpo$origin = origin;
+		}
+
+		return origin.isEmpty() ? supplier : new FixedFileSupplier(origin.get(), type.getDirectory() + "/" + id.getNamespace() + "/" + id.getPath(), supplier);
+	}
+
 	@Inject(method = "listResources", at = @At("HEAD"), cancellable = true)
 	private void rpo$cachedListResources(
 		final PackType type, final String namespace, final String directory, final PackResources.ResourceOutput output, final CallbackInfo ci
 	) {
-		if (RPO_BYPASS.get() || !this.rpo$isImmutable()) {
+		if (RPO_BYPASS.get() || !RpoSettings.active() || !this.rpo$isImmutable()) {
 			return;
 		}
 
@@ -84,7 +104,7 @@ public abstract class VanillaPackResourcesMixin implements ImmutablePack {
 			List<Map.Entry<ResourceLocation, IoSupplier<InputStream>>> collected = new ArrayList<>();
 			RPO_BYPASS.set(Boolean.TRUE);
 			try {
-				this.listResources(type, namespace, directory, (id, resource) -> collected.add(Map.entry(id, resource)));
+				this.listResources(type, namespace, directory, (id, resource) -> collected.add(Map.entry(id, this.rpo$identify(type, id, resource))));
 			} finally {
 				RPO_BYPASS.set(Boolean.FALSE);
 			}
@@ -102,7 +122,7 @@ public abstract class VanillaPackResourcesMixin implements ImmutablePack {
 
 	@Inject(method = "getResource", at = @At("HEAD"), cancellable = true)
 	private void rpo$cachedGetResource(final PackType type, final ResourceLocation location, final CallbackInfoReturnable<IoSupplier<InputStream>> cir) {
-		if (RPO_BYPASS.get() || !this.rpo$isImmutable()) {
+		if (RPO_BYPASS.get() || !RpoSettings.active() || !this.rpo$isImmutable()) {
 			return;
 		}
 
@@ -111,7 +131,7 @@ public abstract class VanillaPackResourcesMixin implements ImmutablePack {
 		if (lookup == null) {
 			RPO_BYPASS.set(Boolean.TRUE);
 			try {
-				lookup = Optional.ofNullable(this.getResource(type, location));
+				lookup = Optional.ofNullable(this.rpo$identify(type, location, this.getResource(type, location)));
 			} finally {
 				RPO_BYPASS.set(Boolean.FALSE);
 			}

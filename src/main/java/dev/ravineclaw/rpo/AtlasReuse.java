@@ -59,6 +59,11 @@ public final class AtlasReuse {
 		}
 	}
 
+	public static void clear() {
+		UPLOADED.clear();
+		BUILT.clear();
+	}
+
 	public static void contentsCleared(final ResourceLocation atlas) {
 		UPLOADED.remove(atlas);
 	}

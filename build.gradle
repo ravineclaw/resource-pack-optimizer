@@ -19,6 +19,22 @@ loom {
 					vmArg "-Drpo.selftest.world=true"
 				}
 			}
+			if (project.hasProperty("rpoBench")) {
+				vmArg "-Drpo.bench=${project.findProperty('rpoBench')}"
+				vmArg "-Drpo.bench.runs=${project.findProperty('rpoRuns') ?: '5'}"
+				if (project.hasProperty("rpoShow")) {
+					vmArg "-Drpo.bench.show=true"
+				}
+				if (project.hasProperty("rpoScout")) {
+					vmArg "-Drpo.bench.scout=true"
+				}
+				if (project.hasProperty("rpoRejoin")) {
+					vmArg "-Drpo.bench.rejoin=true"
+				}
+				if (project.hasProperty("rpoPos")) {
+					vmArg "-Drpo.bench.pos=${project.findProperty('rpoPos')}"
+				}
+			}
 			if (project.hasProperty("rpoJfr")) {
 				vmArg "-XX:StartFlightRecording=filename=${project.findProperty('rpoJfr')},settings=profile"
 			}
@@ -30,6 +46,12 @@ loom {
 }
 
 repositories {
+	maven {
+		url = "https://api.modrinth.com/maven"
+		content {
+			includeGroup "maven.modrinth"
+		}
+	}
 	maven {
 		url = "https://maven.terraformersmc.com/releases/"
 		content {
@@ -46,6 +68,18 @@ dependencies {
 		transitive = false
 	}
 	compileOnly "org.jspecify:jspecify:1.0.0"
+	if (project.hasProperty("rpoSodium")) {
+		modRuntimeOnly "maven.modrinth:sodium:${project.findProperty('rpoSodium')}"
+	}
+	if (project.hasProperty("rpoSodiumExtra")) {
+		modRuntimeOnly "maven.modrinth:sodium-extra:${project.findProperty('rpoSodiumExtra')}"
+	}
+	if (project.hasProperty("rpoIris")) {
+		modRuntimeOnly "maven.modrinth:iris:${project.findProperty('rpoIris')}"
+	}
+	if (project.hasProperty("rpoFabricApi")) {
+		modRuntimeOnly "net.fabricmc.fabric-api:fabric-api:${project.findProperty('rpoFabricApi')}"
+	}
 }
 
 processResources {
