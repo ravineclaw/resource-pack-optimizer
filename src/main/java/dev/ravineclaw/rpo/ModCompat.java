@@ -8,7 +8,9 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
 import net.minecraft.client.renderer.texture.AbstractTexture;
+import net.minecraft.client.renderer.texture.SpriteContents;
 import net.minecraft.client.renderer.texture.TextureAtlas;
+import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import org.jspecify.annotations.Nullable;
 
 public final class ModCompat {
@@ -84,6 +86,10 @@ public final class ModCompat {
 			"net.irisshaders.iris.mixin.fabulous.MixinDisableFabulousGraphics",
 			new Rule(Set.of("disableFabulousGraphicsOnResourceReload", "disableFabulousGraphicsOnLevelRendererReload"), () -> true)
 		),
+		Map.entry(
+			"me.flashyreese.mods.sodiumextra.mixin.animation.MixinTextureAtlas",
+			new Rule(Set.of("cycleAnimationFrames", "upload"), () -> sodiumExtraSetSprite() != null)
+		),
 		Map.entry("net.irisshaders.iris.mixin.MixinLevelRenderer_SkipRendering", new Rule(Set.of("skipRenderEntities"), () -> true))
 	);
 
@@ -92,6 +98,8 @@ public final class ModCompat {
 	private static volatile @Nullable SodiumHooks sodiumSpriteFinder;
 	private static volatile boolean sodiumSearched;
 
+	private static volatile @Nullable Method sodiumExtraSetSprite;
+	private static volatile boolean sodiumExtraSearched;
 	private static volatile @Nullable IrisHooks irisTracker;
 	private static volatile boolean irisSearched;
 
@@ -152,6 +160,35 @@ public final class ModCompat {
 				ResourcePackOptimizer.LOGGER.warn("Couldn't register {} with Iris", atlas.location(), e);
 			}
 		}
+	}
+
+	public static void animationStateCreated(final SpriteContents.AnimationState state, final TextureAtlasSprite sprite) {
+		Method setSprite = sodiumExtraSetSprite();
+		if (setSprite != null) {
+			try {
+				setSprite.invoke(state, sprite);
+			} catch (ReflectiveOperationException | RuntimeException e) {
+				ResourcePackOptimizer.LOGGER.warn("Couldn't hand {} to Sodium Extra", sprite.contents().name(), e);
+			}
+		}
+	}
+
+	private static @Nullable Method sodiumExtraSetSprite() {
+		if (!sodiumExtraSearched) {
+			synchronized (ModCompat.class) {
+				if (!sodiumExtraSearched) {
+					try {
+						sodiumExtraSetSprite = SpriteContents.AnimationState.class.getMethod("sodium_extra$setSprite", TextureAtlasSprite.class);
+					} catch (NoSuchMethodException | RuntimeException e) {
+						sodiumExtraSetSprite = null;
+					}
+
+					sodiumExtraSearched = true;
+				}
+			}
+		}
+
+		return sodiumExtraSetSprite;
 	}
 
 	private static @Nullable IrisHooks irisTracker() {

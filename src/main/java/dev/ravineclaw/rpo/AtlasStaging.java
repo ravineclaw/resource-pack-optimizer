@@ -357,9 +357,10 @@ public final class AtlasStaging {
 			List<SpriteContents.AnimationState> batch = new ArrayList<>();
 			do {
 				int index = this.nextSprite++;
-				SpriteContents.AnimationState state = this.animated.get(index)
-					.createAnimationState(this.staged.spriteUbos.slice(index * this.uboBlockSize, this.uboBlockSize), this.spriteUboSize);
+				TextureAtlasSprite sprite = this.animated.get(index);
+				SpriteContents.AnimationState state = sprite.createAnimationState(this.staged.spriteUbos.slice(index * this.uboBlockSize, this.uboBlockSize), this.spriteUboSize);
 				if (state != null) {
+					ModCompat.animationStateCreated(state, sprite);
 					this.staged.states.add(state);
 					batch.add(state);
 				}
