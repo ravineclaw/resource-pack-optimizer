@@ -15,6 +15,7 @@ import dev.ravineclaw.rpo.ModCompat;
 import dev.ravineclaw.rpo.ReloadChanges;
 import dev.ravineclaw.rpo.ResourcePackOptimizer;
 import dev.ravineclaw.rpo.RpoSettings;
+import dev.ravineclaw.rpo.TerrainHandoff;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -102,6 +103,7 @@ public abstract class TextureAtlasMixin extends AbstractTexture {
 	}
 
 	@Unique
+	@SuppressWarnings("deprecation")
 	private boolean rpo$swapIn(final AtlasStaging.Staged staged, final SpriteLoader.Preparations preparations) {
 		Map<Identifier, TextureAtlasSprite> byName = Map.copyOf(preparations.regions());
 		TextureAtlasSprite missing = byName.get(MissingTextureAtlasSprite.getLocation());
@@ -116,12 +118,18 @@ public abstract class TextureAtlasMixin extends AbstractTexture {
 		}
 
 		old.addAll(List.of(this.mipViews));
-		if (this.textureView != null) {
-			old.add(this.textureView);
-		}
+		boolean handedOff = this.location.equals(TextureAtlas.LOCATION_BLOCKS)
+			&& this.texture != null
+			&& this.textureView != null
+			&& TerrainHandoff.offer(this.texture, this.textureView);
+		if (!handedOff) {
+			if (this.textureView != null) {
+				old.add(this.textureView);
+			}
 
-		if (this.texture != null) {
-			old.add(this.texture);
+			if (this.texture != null) {
+				old.add(this.texture);
+			}
 		}
 
 		this.texture = staged.texture();

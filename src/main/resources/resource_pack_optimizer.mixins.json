@@ -6,6 +6,7 @@
 	"client": [
 		"CachedFontProviderMixin",
 		"ColorMapListenerMixin",
+		"CompiledSectionMeshMixin",
 		"FilePackResourcesMixin",
 		"FileResourcesSupplierAccessor",
 		"FixedPathPackResourcesMixin",
@@ -18,6 +19,7 @@
 		"LanguageManagerMixin",
 		"LanguageSelectScreenMixin",
 		"LevelExtractorMixin",
+		"LevelRendererMixin",
 		"LoadingOverlayMixin",
 		"MinecraftMixin",
 		"ModelManagerMixin",
@@ -31,7 +33,9 @@
 		"PostChainCacheMixin",
 		"ReloadableResourceManagerMixin",
 		"ReloadableTextureMixin",
+		"RenderSectionMixin",
 		"ResourceAccessor",
+		"SectionCompileTaskMixin",
 		"ShaderManagerMixin",
 		"SimpleReloadInstanceMixin",
 		"SoundEngineMixin",
@@ -42,7 +46,8 @@
 		"TextureAtlasAccessor",
 		"TextureAtlasMixin",
 		"TextureAtlasSpriteAccessor",
-		"TextureManagerMixin"
+		"TextureManagerMixin",
+		"ViewAreaMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
