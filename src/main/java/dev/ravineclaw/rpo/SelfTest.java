@@ -93,6 +93,8 @@ public final class SelfTest {
 				waitUntil(minecraft, () -> minecraft.level == null);
 			}
 
+			SpriteDiskCache.flush();
+			SpirvDiskCache.flush();
 			log("done");
 			minecraft.execute(minecraft::stop);
 		} catch (Throwable t) {
