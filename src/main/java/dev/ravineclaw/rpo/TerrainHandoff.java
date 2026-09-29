@@ -1,7 +1,7 @@
 package dev.ravineclaw.rpo;
 
-import com.mojang.renderpearl.api.textures.GpuTexture;
-import com.mojang.renderpearl.api.textures.GpuTextureView;
+import com.mojang.blaze3d.textures.GpuTexture;
+import com.mojang.blaze3d.textures.GpuTextureView;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
