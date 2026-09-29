@@ -39,14 +39,14 @@ import org.objectweb.asm.tree.MethodNode;
 import org.spongepowered.asm.mixin.transformer.meta.MixinMerged;
 
 public final class ReuseGuard {
-	private record Foreign(String mixin, @Nullable String handler) {
+	private record Foreign(String mixin, @Nullable String method, boolean overwrite) {
 	}
 
 	private static final String OWN_MIXINS = "dev.ravineclaw.rpo.mixin.";
 	private static final Pattern INJECTED_HANDLER = Pattern.compile("^[A-Za-z]+\\$[a-z]{3}[0-9a-f]{3}\\$");
 	private static final Set<String> REPORTED = ConcurrentHashMap.newKeySet();
 	private static final Map<String, List<Foreign>> FOREIGN = new ConcurrentHashMap<>();
-	private static final List<Foreign> UNKNOWN = List.of(new Foreign("an unknown mixin", null));
+	private static final List<Foreign> UNKNOWN = List.of(new Foreign("an unknown mixin", null, false));
 
 	public static final String[] ATLASES = names(
 		SpriteLoader.class,
@@ -87,7 +87,7 @@ public final class ReuseGuard {
 		try {
 			for (String className : classNames) {
 				for (Foreign foreign : FOREIGN.computeIfAbsent(className, ReuseGuard::findForeignMixins)) {
-					if (FabricCompat.tolerates(foreign.mixin(), foreign.handler())) {
+					if (foreign.method() != null && ModCompat.tolerates(foreign.mixin(), foreign.method(), foreign.overwrite())) {
 						continue;
 					}
 
@@ -97,7 +97,7 @@ public final class ReuseGuard {
 							what,
 							foreign.mixin(),
 							className,
-							foreign.handler() != null ? " (" + foreign.handler() + ")" : ""
+							foreign.method() != null ? " (" + foreign.method() + ")" : ""
 						);
 					}
 
@@ -128,8 +128,7 @@ public final class ReuseGuard {
 				}
 
 				if (INJECTED_HANDLER.matcher(method.getName()).find()) {
-					String[] parts = method.getName().split("[$]");
-					found.add(new Foreign(merged.mixin(), parts.length > 3 ? parts[3] : null));
+					found.add(new Foreign(merged.mixin(), handlerName(method.getName()), false));
 					continue;
 				}
 
@@ -138,7 +137,7 @@ public final class ReuseGuard {
 				}
 
 				if (vanilla.contains(method.getName() + Type.getMethodDescriptor(method))) {
-					found.add(new Foreign(merged.mixin(), null));
+					found.add(new Foreign(merged.mixin(), method.getName(), true));
 				}
 			}
 
@@ -146,6 +145,16 @@ public final class ReuseGuard {
 		} catch (ReflectiveOperationException | LinkageError | IOException | RuntimeException e) {
 			return UNKNOWN;
 		}
+	}
+
+	private static @Nullable String handlerName(final String name) {
+		String[] parts = name.split("[$]", 4);
+		if (parts.length < 4) {
+			return null;
+		}
+
+		int bridge = parts[3].indexOf("$mixinextras$");
+		return bridge < 0 ? parts[3] : parts[3].substring(0, bridge);
 	}
 
 	private static Set<String> vanillaMethods(final ClassLoader loader, final String className) throws IOException {
