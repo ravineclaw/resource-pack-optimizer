@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.At;
 @Mixin(LevelRenderer.class)
 public abstract class LevelRendererAtlasMixin {
 	@ModifyExpressionValue(
-		method = {"executeSolid", "executeOit", "prepareChunkRenders", "prepareChunkRendersIndirect"},
+		method = "prepareChunkRenders",
 		at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/texture/AbstractTexture;getTextureView()Lcom/mojang/blaze3d/textures/GpuTextureView;")
 	)
 	private GpuTextureView rpo$terrainAtlas(final GpuTextureView atlas) {

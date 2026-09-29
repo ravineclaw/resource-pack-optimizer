@@ -24,11 +24,11 @@ public final class ModCompat {
 		}
 	}
 
-	private static final String FABRIC_SPRITE_FINDER = "net.fabricmc.fabric.api.client.renderer.v1.sprite.SpriteFinder";
+	private static final String FABRIC_SPRITE_FINDER = "net.fabricmc.fabric.api.renderer.v1.model.SpriteFinder";
 	private static final String IRIS_TEXTURE_TRACKER = "net.irisshaders.iris.pbr.TextureTracker";
 	private static final String SODIUM_SPRITE_FINDER_CACHE = "net.caffeinemc.mods.sodium.client.render.texture.SpriteFinderCache";
 	private static final Map<String, Rule> RULES = Map.ofEntries(
-		Map.entry("net.fabricmc.fabric.mixin.client.renderer.sprite.TextureAtlasMixin", new Rule(Set.of("uploadHook"), () -> fabricSpriteFinder() != null)),
+		Map.entry("net.fabricmc.fabric.mixin.renderer.client.sprite.TextureAtlasMixin", new Rule(Set.of("uploadHook"), () -> fabricSpriteFinder() != null)),
 		Map.entry("net.fabricmc.fabric.mixin.client.rendering.AtlasManagerMixin", new Rule(Set.of("addAtlases"), () -> true)),
 		Map.entry(
 			"net.fabricmc.fabric.mixin.client.model.loading.ModelManagerMixin",
@@ -53,15 +53,6 @@ public final class ModCompat {
 			new Rule(Set.of("onReturnInit", "hookBlockModelBake", "withExtraModels", "wrapBlockModelBake", "wrapItemModelBake"), ModCompat::noModelPlugins)
 		),
 		Map.entry(
-			"net.fabricmc.fabric.mixin.client.renderer.block.particle.LevelExtractorMixin",
-			new Rule(Set.of("getParticleMaterialProxy", "captureViewBlockingPosition"), () -> true)
-		),
-		Map.entry("net.fabricmc.fabric.mixin.client.renderer.block.render.LevelExtractorMixin", new Rule(Set.of("hasMaterialFlagProxy"), () -> true)),
-		Map.entry(
-			"net.fabricmc.fabric.mixin.client.rendering.LevelExtractorMixin",
-			new Rule(Set.of("afterBlockOutlineExtraction", "afterExtractLevel", "onReload"), ModCompat::noInvalidateListeners)
-		),
-		Map.entry(
 			"net.fabricmc.fabric.mixin.client.renderer.block.render.LevelRendererMixin",
 			new Rule(Set.of("beforeCreateRandom", "cancelCollectParts", "submitBreakingBlockModelProxy"), () -> true)
 		),
@@ -70,23 +61,25 @@ public final class ModCompat {
 			new Rule(
 				Set.of(
 					"beforeRender",
-					"prepareChunkRenders",
-					"wrapRenderOpaqueTerrain",
-					"onCreatePoseStack",
-					"afterCollectSubmits",
-					"afterRenderSolidFeatures",
-					"afterRenderTranslucentFeatures",
-					"afterRenderClassicTranslucentFeatures",
-					"afterRenderOitTranslucentFeatures",
-					"beforeRenderBlockOutline",
-					"beforeCollectGizmos",
-					"wrapRenderTranslucentTerrain",
-					"endMainRender"
+					"onSetupFrustum",
+					"afterBlockOutlineExtraction",
+					"onWorldBorderExtraction",
+					"onRenderBlockLayers",
+					"beforeTerrainRender",
+					"onCreateMatrixStack",
+					"beforeEntitySubmission",
+					"afterEntityRender",
+					"beforeDebugRender",
+					"beforeTranslucentRender",
+					"beforeDrawBlockOutline",
+					"endMainRender",
+					"onReload"
 				),
-				() -> true
+				ModCompat::noInvalidateListeners
 			)
 		),
 		Map.entry("net.fabricmc.fabric.mixin.client.sound.SoundEngineMixin", new Rule(Set.of("getStream"), () -> true)),
+		Map.entry("net.caffeinemc.mods.sodium.mixin.features.textures.scan.SpriteContentsMixin", new Rule(Set.of("beforeGenerateMipLevels"), () -> true)),
 		Map.entry("net.caffeinemc.mods.sodium.mixin.core.render.TextureAtlasMixin", new Rule(Set.of("deleteSpriteFinder"), () -> sodiumSpriteFinder() != null)),
 		Map.entry("net.caffeinemc.mods.sodium.mixin.features.textures.animations.tracking.TextureAtlasMixin", new Rule(Set.of("preReturnSprite"), () -> true)),
 		Map.entry("net.caffeinemc.mods.sodium.mixin.features.textures.animations.tracking.AtlasManagerMixin", new Rule(Set.of("catchUsedSprites"), () -> true)),
@@ -96,14 +89,6 @@ public final class ModCompat {
 		),
 		Map.entry("net.caffeinemc.mods.sodium.mixin.features.textures.animations.tracking.TextureAtlasSpriteMixin", new Rule(Set.of("markSpriteAsActive"), () -> true)),
 		Map.entry("net.caffeinemc.mods.sodium.mixin.features.textures.scan.TextureAtlasSpriteMixin", new Rule(Set.of("hookTickerInstantiation"), () -> true)),
-		Map.entry(
-			"net.caffeinemc.mods.sodium.mixin.core.render.world.LevelExtractorMixin",
-			new Rule(
-				Set.of("setRenderer", "extractVisibleBlockEntities", "replaceBlockEntityIteration", "cullTerrain", "cancel"),
-				Set.of("sectionStatistics", "setBlocksDirty", "setSectionDirtyWithNeighbors", "setBlockDirty", "setSectionDirty", "countRenderedSections"),
-				() -> true
-			)
-		),
 		Map.entry("net.irisshaders.iris.mixin.texture.MixinSpriteContents", new Rule(Set.of("redirectMipmapGeneration"), () -> true)),
 		Map.entry("net.irisshaders.iris.mixin.texture.pbr.MixinSpriteContents", new Rule(Set.of("onTailClose", "onTailMarkActive"), () -> true)),
 		Map.entry("net.irisshaders.iris.mixin.texture.MixinTextureManager", new Rule(Set.of("onTailReloadLambda", "onInnerDumpTextures", "onTailClose"), () -> true)),

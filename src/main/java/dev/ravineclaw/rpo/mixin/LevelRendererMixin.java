@@ -1,17 +1,18 @@
 package dev.ravineclaw.rpo.mixin;
 
+import dev.ravineclaw.rpo.ReloadChanges;
+import dev.ravineclaw.rpo.ResourcePackOptimizer;
+import dev.ravineclaw.rpo.ReuseGuard;
+import dev.ravineclaw.rpo.RpoSettings;
 import dev.ravineclaw.rpo.TerrainHandoff;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
-import net.minecraft.client.Camera;
-import net.minecraft.client.Options;
-import net.minecraft.client.color.block.BlockColors;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.CloudRenderer;
+import net.minecraft.client.renderer.ItemBlockRenderTypes;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.ViewArea;
-import net.minecraft.client.renderer.chunk.SectionCompiler;
 import net.minecraft.client.renderer.chunk.SectionRenderDispatcher;
-import net.minecraft.client.resources.model.ModelManager;
 import net.minecraft.world.level.block.LeavesBlock;
 import org.jspecify.annotations.Nullable;
 import org.spongepowered.asm.mixin.Final;
@@ -26,52 +27,63 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class LevelRendererMixin {
 	@Shadow
 	@Final
-	private ModelManager modelManager;
+	private Minecraft minecraft;
+	@Shadow
+	@Final
+	private CloudRenderer cloudRenderer;
+	@Shadow
+	@Final
+	private ObjectArrayList<SectionRenderDispatcher.RenderSection> visibleSections;
 	@Shadow
 	private @Nullable ViewArea viewArea;
 	@Shadow
 	private @Nullable SectionRenderDispatcher sectionRenderDispatcher;
 	@Shadow
-	@Final
-	private ObjectArrayList<SectionRenderDispatcher.RenderSection> visibleSections;
+	private @Nullable ClientLevel level;
 
-	@Shadow
-	public abstract CloudRenderer cloudRenderer();
+	@Inject(method = "allChanged", at = @At("HEAD"), cancellable = true)
+	private void rpo$skipUnneededRebuild(final CallbackInfo ci) {
+		TerrainHandoff.request(false);
+		if (RpoSettings.active()
+			&& this.viewArea != null
+			&& this.sectionRenderDispatcher != null
+			&& ReloadChanges.isFinishingReload()
+			&& ReloadChanges.meshInputsUnchanged()
+			&& ReuseGuard.untouched("chunk meshes", ReuseGuard.CHUNKS)) {
+			ResourcePackOptimizer.LOGGER.debug("Nothing chunk meshes depend on changed; keeping the built chunks");
+			ci.cancel();
+			return;
+		}
 
-	@Inject(method = "invalidateCompiledGeometry", at = @At("HEAD"), cancellable = true)
-	private void rpo$keepMeshesUntilRebuilt(final ClientLevel level, final Options options, final Camera camera, final BlockColors blockColors, final CallbackInfo ci) {
+		TerrainHandoff.request(RpoSettings.active() && ReloadChanges.isFinishingReload());
+		ClientLevel current = this.level;
 		SectionRenderDispatcher sections = this.sectionRenderDispatcher;
 		ViewArea area = this.viewArea;
-		if (sections == null || area == null || area.getViewDistance() != options.getEffectiveRenderDistance()) {
+		if (current == null || sections == null || area == null || area.getViewDistance() != this.minecraft.options.getEffectiveRenderDistance()) {
 			TerrainHandoff.abort();
 			return;
 		}
 
-		SectionCompiler compiler = new SectionCompiler(
-			options.ambientOcclusion().get(),
-			options.cutoutLeaves().get(),
-			this.modelManager.getBlockStateModelSet(),
-			this.modelManager.getFluidStateModelSet(),
-			blockColors
-		);
-		if (!TerrainHandoff.start(compiler, sections, area)) {
+		if (!TerrainHandoff.start(sections, area)) {
 			TerrainHandoff.abort();
 			return;
 		}
 
-		sections.setCompiler(compiler);
-		this.cloudRenderer().markForRebuild();
-		LeavesBlock.setCutoutLeaves(options.cutoutLeaves().get());
+		current.clearTintCaches();
+		this.cloudRenderer.markForRebuild();
+		boolean cutout = this.minecraft.options.cutoutLeaves().get();
+		ItemBlockRenderTypes.setCutoutLeaves(cutout);
+		LeavesBlock.setCutoutLeaves(cutout);
 		sections.clearCompileQueue();
 		ci.cancel();
 	}
 
-	@Inject(method = "resetLevelRenderData", at = @At("HEAD"))
+	@Inject(method = "setLevel", at = @At("HEAD"))
 	private void rpo$abortHandoff(final CallbackInfo ci) {
 		TerrainHandoff.abort();
 	}
 
-	@Inject(method = {"prepareChunkRenders", "prepareChunkRendersIndirect"}, at = @At("HEAD"))
+	@Inject(method = "prepareChunkRenders", at = @At("HEAD"))
 	private void rpo$handoffFrame(final CallbackInfoReturnable<?> cir) {
 		TerrainHandoff.frame(this.viewArea, this.visibleSections);
 	}

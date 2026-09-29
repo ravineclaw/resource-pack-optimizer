@@ -1,5 +1,6 @@
 package dev.ravineclaw.rpo;
 
+import dev.ravineclaw.rpo.mixin.SectionRenderDispatcherAccessor;
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import java.util.ArrayList;
@@ -7,30 +8,22 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.ViewArea;
+import net.minecraft.client.renderer.chunk.ChunkSectionsToRender;
 import net.minecraft.client.renderer.chunk.CompiledSectionMesh;
-import net.minecraft.client.renderer.chunk.SectionCompiler;
 import net.minecraft.client.renderer.chunk.SectionMesh;
 import net.minecraft.client.renderer.chunk.SectionRenderDispatcher;
 import org.jspecify.annotations.Nullable;
 
 public final class TerrainHandoff {
-	public static final String[] CLASSES = {
-		"net.minecraft.client.renderer.LevelRenderer",
-		"net.minecraft.client.renderer.ViewArea",
-		"net.minecraft.client.renderer.chunk.SectionRenderDispatcher",
-		"net.minecraft.client.renderer.chunk.SectionRenderDispatcher$RenderSection",
-		"net.minecraft.client.renderer.chunk.SectionRenderDispatcher$RenderSection$CompileTask",
-		"net.minecraft.client.renderer.chunk.CompiledSectionMesh",
-		"net.minecraft.client.renderer.chunk.ChunkSectionsToRender",
-		"net.minecraft.client.renderer.extract.LevelExtractor"
-	};
+	public static final String[] CLASSES = classes();
 	private static final long TIMEOUT_NANOS = 3_000_000_000L;
 	private static final long OFFER_NANOS = 10_000_000_000L;
 	private static final Object LOCK = new Object();
 	private static final Map<SectionRenderDispatcher.RenderSection, SectionMesh> HELD = new IdentityHashMap<>();
 
-	private static volatile @Nullable SectionCompiler compiler;
+	private static volatile @Nullable Object epoch;
 	private static @Nullable SectionRenderDispatcher dispatcher;
 	private static @Nullable ViewArea area;
 	private static @Nullable GpuTexture texture;
@@ -47,26 +40,38 @@ public final class TerrainHandoff {
 	private TerrainHandoff() {
 	}
 
+	private static String[] classes() {
+		List<Class<?>> list = new ArrayList<>(List.of(
+			LevelRenderer.class,
+			ViewArea.class,
+			SectionRenderDispatcher.class,
+			SectionRenderDispatcher.RenderSection.class,
+			SectionRenderDispatcher.RenderSection.CompileTask.class,
+			CompiledSectionMesh.class,
+			ChunkSectionsToRender.class
+		));
+		list.addAll(List.of(SectionRenderDispatcher.RenderSection.class.getDeclaredClasses()));
+		return list.stream().map(Class::getName).toArray(String[]::new);
+	}
+
 	public interface Section {
 		void rpo$apply(SectionMesh mesh);
 
 		void rpo$release(SectionMesh mesh);
 
 		void rpo$demote();
+
+		void rpo$invalidate();
 	}
 
 	public interface Stamped {
-		@Nullable SectionCompiler rpo$compiler();
+		@Nullable Object rpo$epoch();
 
-		void rpo$setCompiler(@Nullable SectionCompiler compiler);
-	}
-
-	public interface Area {
-		Iterable<SectionRenderDispatcher.RenderSection> rpo$sections();
+		void rpo$setEpoch(@Nullable Object epoch);
 	}
 
 	public static boolean offer(final GpuTexture oldTexture, final GpuTextureView oldView) {
-		if (!RpoSettings.active() || compiler != null || Minecraft.getInstance().level == null || !ReuseGuard.untouched("chunk meshes until rebuilt", CLASSES)) {
+		if (!RpoSettings.active() || epoch != null || Minecraft.getInstance().level == null || !ReuseGuard.untouched("chunk meshes until rebuilt", CLASSES)) {
 			return false;
 		}
 
@@ -78,30 +83,28 @@ public final class TerrainHandoff {
 	}
 
 	public static void request(final boolean reload) {
-		requested = reload && RpoSettings.active() && (offeredView != null || compiler != null);
+		requested = reload && RpoSettings.active() && (offeredView != null || epoch != null);
 	}
 
-	public static boolean start(final SectionCompiler next, final SectionRenderDispatcher sections, final ViewArea viewArea) {
+	public static boolean start(final SectionRenderDispatcher sections, final ViewArea viewArea) {
 		boolean wanted = requested;
 		requested = false;
 		if (!wanted) {
 			return false;
 		}
 
-		if (compiler != null) {
+		Object next = new Object();
+
+		if (epoch != null) {
 			if (dispatcher != sections || area != viewArea) {
 				return false;
 			}
 
-			sections.lock();
-			try {
-				synchronized (LOCK) {
-					releaseHeld();
-					compiler = next;
-				}
-			} finally {
-				sections.unlock();
+			synchronized (LOCK) {
+				releaseHeld();
+				epoch = next;
 			}
+			invalidate(viewArea);
 
 			startedAt = System.nanoTime();
 			blank = 0;
@@ -120,23 +123,47 @@ public final class TerrainHandoff {
 		area = viewArea;
 		startedAt = System.nanoTime();
 		blank = 0;
-		compiler = next;
+		epoch = next;
+		invalidate(viewArea);
 		return true;
 	}
 
+	private static void invalidate(final ViewArea viewArea) {
+		for (SectionRenderDispatcher.RenderSection section : viewArea.sections) {
+			if (section != null) {
+				((Section)section).rpo$invalidate();
+			}
+		}
+	}
+
+	public static void release(final SectionMesh mesh) {
+		SectionRenderDispatcher sections = dispatcher;
+		if (mesh != CompiledSectionMesh.UNCOMPILED) {
+			if (sections != null) {
+				((SectionRenderDispatcherAccessor)sections).rpo$toClose().add(mesh);
+			} else {
+				mesh.close();
+			}
+		}
+	}
+
+	public static @Nullable Object epoch() {
+		return epoch;
+	}
+
 	public static GpuTextureView terrainAtlas(final GpuTextureView current) {
-		GpuTextureView old = compiler != null ? view : offeredView;
+		GpuTextureView old = epoch != null ? view : offeredView;
 		return old != null ? old : current;
 	}
 
 	public static @Nullable SectionMesh hold(final SectionRenderDispatcher.RenderSection section, final SectionMesh mesh) {
-		if (compiler == null || !(mesh instanceof Stamped stamped)) {
+		if (epoch == null || !(mesh instanceof Stamped stamped)) {
 			return null;
 		}
 
 		synchronized (LOCK) {
-			SectionCompiler current = compiler;
-			if (current == null || stamped.rpo$compiler() != current) {
+			Object current = epoch;
+			if (current == null || stamped.rpo$epoch() != current) {
 				return null;
 			}
 
@@ -147,25 +174,20 @@ public final class TerrainHandoff {
 
 	public static void dropHeld(final SectionRenderDispatcher.RenderSection section) {
 		SectionRenderDispatcher sections = dispatcher;
-		if (compiler == null || sections == null) {
+		if (epoch == null || sections == null) {
 			return;
 		}
 
-		sections.lock();
-		try {
-			synchronized (LOCK) {
-				SectionMesh held = HELD.remove(section);
-				if (held != null) {
-					((Section)section).rpo$release(held);
-				}
+		synchronized (LOCK) {
+			SectionMesh held = HELD.remove(section);
+			if (held != null) {
+				((Section)section).rpo$release(held);
 			}
-		} finally {
-			sections.unlock();
 		}
 	}
 
 	public static void frame(final @Nullable ViewArea viewArea, final List<SectionRenderDispatcher.RenderSection> visible) {
-		SectionCompiler current = compiler;
+		Object current = epoch;
 		if (current == null) {
 			return;
 		}
@@ -198,7 +220,7 @@ public final class TerrainHandoff {
 	}
 
 	public static void tick() {
-		if (offeredView != null && compiler == null && System.nanoTime() - offeredAt > OFFER_NANOS) {
+		if (offeredView != null && epoch == null && System.nanoTime() - offeredAt > OFFER_NANOS) {
 			closeOffer();
 		}
 	}
@@ -206,24 +228,13 @@ public final class TerrainHandoff {
 	public static void abort() {
 		requested = false;
 		closeOffer();
-		if (compiler == null) {
+		if (epoch == null) {
 			return;
 		}
 
-		SectionRenderDispatcher sections = dispatcher;
-		if (sections != null) {
-			sections.lock();
-		}
-
-		try {
-			synchronized (LOCK) {
-				releaseHeld();
-				compiler = null;
-			}
-		} finally {
-			if (sections != null) {
-				sections.unlock();
-			}
+		synchronized (LOCK) {
+			releaseHeld();
+			epoch = null;
 		}
 
 		lastResult = "#" + ++handoffs + ": aborted";
@@ -231,7 +242,7 @@ public final class TerrainHandoff {
 	}
 
 	public static boolean active() {
-		return compiler != null;
+		return epoch != null;
 	}
 
 	public static boolean offered() {
@@ -242,7 +253,7 @@ public final class TerrainHandoff {
 		return lastResult;
 	}
 
-	private static void commit(final SectionCompiler current, final long waited, final int waiting) {
+	private static void commit(final Object current, final long waited, final int waiting) {
 		SectionRenderDispatcher sections = dispatcher;
 		ViewArea viewArea = area;
 		if (sections == null || viewArea == null) {
@@ -252,25 +263,20 @@ public final class TerrainHandoff {
 
 		int applied;
 		int demoted = 0;
-		sections.lock();
-		try {
-			synchronized (LOCK) {
-				compiler = null;
-				applied = HELD.size();
-				for (Map.Entry<SectionRenderDispatcher.RenderSection, SectionMesh> entry : HELD.entrySet()) {
-					((Section)entry.getKey()).rpo$apply(entry.getValue());
-				}
+		synchronized (LOCK) {
+			epoch = null;
+			applied = HELD.size();
+			for (Map.Entry<SectionRenderDispatcher.RenderSection, SectionMesh> entry : HELD.entrySet()) {
+				((Section)entry.getKey()).rpo$apply(entry.getValue());
+			}
 
-				HELD.clear();
-				for (SectionRenderDispatcher.RenderSection section : ((Area)viewArea).rpo$sections()) {
-					if (section != null && isStale(section.getSectionMesh(), current)) {
-						((Section)section).rpo$demote();
-						demoted++;
-					}
+			HELD.clear();
+			for (SectionRenderDispatcher.RenderSection section : viewArea.sections) {
+				if (section != null && isStale(section.getSectionMesh(), current)) {
+					((Section)section).rpo$demote();
+					demoted++;
 				}
 			}
-		} finally {
-			sections.unlock();
 		}
 
 		lastResult = String.format(
@@ -286,8 +292,8 @@ public final class TerrainHandoff {
 		finish();
 	}
 
-	private static boolean isStale(final SectionMesh mesh, final SectionCompiler current) {
-		return mesh instanceof Stamped stamped && stamped.rpo$compiler() != current;
+	private static boolean isStale(final SectionMesh mesh, final Object current) {
+		return mesh instanceof Stamped stamped && stamped.rpo$epoch() != current;
 	}
 
 	private static void releaseHeld() {

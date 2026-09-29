@@ -14,6 +14,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.CompositePackResources;
 import net.minecraft.server.packs.PackResources;
 import net.minecraft.server.packs.PathPackResources;
+import net.minecraft.server.packs.VanillaPackResources;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
 import org.jspecify.annotations.Nullable;
@@ -94,7 +95,7 @@ public abstract class SoundManagerMixin {
 
 	@Unique
 	private static boolean rpo$survivesClose(final PackResources pack) {
-		if (pack instanceof PathPackResources) {
+		if (pack instanceof PathPackResources || pack instanceof VanillaPackResources) {
 			return true;
 		}
 

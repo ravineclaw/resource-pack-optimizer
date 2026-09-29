@@ -25,6 +25,7 @@ import net.minecraft.data.AtlasIds;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.repository.PackRepository;
 import net.minecraft.sounds.SoundEvents;
+import net.minecraft.world.Difficulty;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.LevelSettings;
 import net.minecraft.world.level.WorldDataConfiguration;
@@ -333,7 +334,7 @@ public final class SelfTest {
 	private static CompletableFuture<Void> screenshotNow(final Minecraft minecraft, final String name) {
 		Path file = minecraft.gameDirectory.toPath().resolve("rpo-dump").resolve(name + ".png");
 		CompletableFuture<Void> written = new CompletableFuture<>();
-		Screenshot.takeScreenshot(minecraft.gameRenderer.mainRenderTarget(), image -> {
+		Screenshot.takeScreenshot(minecraft.getMainRenderTarget(), image -> {
 			try (image) {
 				Files.createDirectories(file.getParent());
 				image.writeToFile(file);
@@ -378,7 +379,7 @@ public final class SelfTest {
 		while (shot != null) {
 			shotWritten = CompletableFuture.supplyAsync(() -> state.getAsBoolean() ? screenshotNow(minecraft, shot) : null, minecraft).join();
 			boolean finished = CompletableFuture.supplyAsync(
-				() -> minecraft.gui.overlay() == null && BackgroundReload.current() == null && !TerrainHandoff.offered() && !TerrainHandoff.active(), minecraft
+				() -> minecraft.getOverlay() == null && BackgroundReload.current() == null && !TerrainHandoff.offered() && !TerrainHandoff.active(), minecraft
 			).join();
 			if (shotWritten != null || finished || System.nanoTime() - start > 10_000_000_000L) {
 				break;

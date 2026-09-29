@@ -15,7 +15,7 @@ import net.minecraft.core.SectionPos;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
-@Mixin(targets = "net.minecraft.client.renderer.chunk.SectionRenderDispatcher$RenderSection$CompileTask")
+@Mixin(targets = "net.minecraft.client.renderer.chunk.SectionRenderDispatcher$RenderSection$RebuildTask")
 public abstract class SectionCompileTaskMixin {
 	@WrapOperation(method = "doTask", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/chunk/SectionCompiler;compile(Lnet/minecraft/core/SectionPos;Lnet/minecraft/client/renderer/chunk/RenderSectionRegion;Lcom/mojang/blaze3d/vertex/VertexSorting;Lnet/minecraft/client/renderer/SectionBufferBuilderPack;)Lnet/minecraft/client/renderer/chunk/SectionCompiler$Results;"))
 	private SectionCompiler.Results rpo$rememberCompiler(
@@ -25,15 +25,15 @@ public abstract class SectionCompileTaskMixin {
 		final VertexSorting sorting,
 		final SectionBufferBuilderPack buffers,
 		final Operation<SectionCompiler.Results> original,
-		@Share("compiler") final LocalRef<SectionCompiler> used
+		@Share("compiler") final LocalRef<Object> used
 	) {
-		used.set(compiler);
+		used.set(TerrainHandoff.epoch());
 		return original.call(compiler, pos, region, sorting, buffers);
 	}
 
 	@ModifyExpressionValue(method = "doTask", at = @At(value = "NEW", target = "net/minecraft/client/renderer/chunk/CompiledSectionMesh"))
-	private CompiledSectionMesh rpo$stamp(final CompiledSectionMesh mesh, @Share("compiler") final LocalRef<SectionCompiler> used) {
-		((TerrainHandoff.Stamped)mesh).rpo$setCompiler(used.get());
+	private CompiledSectionMesh rpo$stamp(final CompiledSectionMesh mesh, @Share("compiler") final LocalRef<Object> used) {
+		((TerrainHandoff.Stamped)mesh).rpo$setEpoch(used.get());
 		return mesh;
 	}
 }

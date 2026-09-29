@@ -37,6 +37,7 @@
 		"ShaderManagerMixin",
 		"SimpleReloadInstanceMixin",
 		"SoundEngineMixin",
+		"SectionRenderDispatcherAccessor",
 		"SoundManagerMixin",
 		"SpriteContentsAccessor",
 		"SpriteContentsMixin",
@@ -45,8 +46,7 @@
 		"TextureAtlasMixin",
 		"TextureAtlasSpriteAccessor",
 		"TextureManagerMixin",
-		"VanillaPackResourcesMixin",
-		"ViewAreaMixin"
+		"VanillaPackResourcesMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

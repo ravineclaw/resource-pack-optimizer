@@ -23,19 +23,22 @@ public abstract class RenderSectionMixin implements TerrainHandoff.Section {
 	private long uploadedTime;
 
 	@Shadow
-	private SectionMesh setSectionMesh(final SectionMesh mesh) {
-		throw new AssertionError();
-	}
+	abstract void setSectionMesh(final SectionMesh mesh);
 
 	@Shadow
-	private void releaseSectionMesh(final SectionMesh mesh) {
-		throw new AssertionError();
-	}
+	protected abstract void cancelTasks();
+
+	@Shadow
+	public abstract void setDirty(final boolean fromPlayer);
 
 	@WrapMethod(method = "setSectionMesh")
-	private SectionMesh rpo$holdUntilHandoff(final SectionMesh mesh, final Operation<SectionMesh> original) {
+	private void rpo$holdUntilHandoff(final SectionMesh mesh, final Operation<Void> original) {
 		SectionMesh release = TerrainHandoff.hold((SectionRenderDispatcher.RenderSection)(Object)this, mesh);
-		return release != null ? release : original.call(mesh);
+		if (release == null) {
+			original.call(mesh);
+		} else {
+			TerrainHandoff.release(release);
+		}
 	}
 
 	@Inject(method = "reset", at = @At("HEAD"))
@@ -45,17 +48,24 @@ public abstract class RenderSectionMixin implements TerrainHandoff.Section {
 
 	@Override
 	public void rpo$apply(final SectionMesh mesh) {
-		this.releaseSectionMesh(this.setSectionMesh(mesh));
+		this.setSectionMesh(mesh);
 	}
 
 	@Override
 	public void rpo$release(final SectionMesh mesh) {
-		this.releaseSectionMesh(mesh);
+		TerrainHandoff.release(mesh);
 	}
 
 	@Override
 	public void rpo$demote() {
-		this.releaseSectionMesh(this.sectionMesh.getAndSet(CompiledSectionMesh.UNCOMPILED));
+		TerrainHandoff.release(this.sectionMesh.getAndSet(CompiledSectionMesh.UNCOMPILED));
 		this.uploadedTime = 0L;
+		this.setDirty(false);
+	}
+
+	@Override
+	public void rpo$invalidate() {
+		this.cancelTasks();
+		this.setDirty(false);
 	}
 }

@@ -13,7 +13,7 @@ public final class ToggleScreen {
 		Component title = Component.literal("Resource Pack Optimizer");
 		if (RpoSettings.mixinsDisabled()) {
 			return new ConfirmScreen(
-				change -> Minecraft.getInstance().gui.setScreen(parent),
+				change -> Minecraft.getInstance().setScreen(parent),
 				title,
 				Component.literal("It is turned off for this session by -Drpo.disable=true."),
 				Component.literal("Done"),

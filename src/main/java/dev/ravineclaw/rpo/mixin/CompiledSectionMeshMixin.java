@@ -2,7 +2,6 @@ package dev.ravineclaw.rpo.mixin;
 
 import dev.ravineclaw.rpo.TerrainHandoff;
 import net.minecraft.client.renderer.chunk.CompiledSectionMesh;
-import net.minecraft.client.renderer.chunk.SectionCompiler;
 import org.jspecify.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -10,15 +9,15 @@ import org.spongepowered.asm.mixin.Unique;
 @Mixin(CompiledSectionMesh.class)
 public abstract class CompiledSectionMeshMixin implements TerrainHandoff.Stamped {
 	@Unique
-	private volatile @Nullable SectionCompiler rpo$compiler;
+	private volatile @Nullable Object rpo$epoch;
 
 	@Override
-	public @Nullable SectionCompiler rpo$compiler() {
-		return this.rpo$compiler;
+	public @Nullable Object rpo$epoch() {
+		return this.rpo$epoch;
 	}
 
 	@Override
-	public void rpo$setCompiler(final @Nullable SectionCompiler compiler) {
-		this.rpo$compiler = compiler;
+	public void rpo$setEpoch(final @Nullable Object epoch) {
+		this.rpo$epoch = epoch;
 	}
 }

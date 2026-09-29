@@ -27,9 +27,11 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.packs.repository.PackRepository;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.Difficulty;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.LevelSettings;
 import net.minecraft.world.level.WorldDataConfiguration;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.presets.WorldPresets;
 
@@ -73,7 +75,7 @@ public final class Benchmark {
 		try {
 			minecraft = waitFor(Minecraft::getInstance);
 			Minecraft mc = minecraft;
-			waitUntil(mc, () -> idle(mc) && mc.gui.screen() instanceof TitleScreen);
+			waitUntil(mc, () -> idle(mc) && mc.screen instanceof TitleScreen);
 			onMain(mc, () -> {
 				mc.options.pauseOnLostFocus = false;
 				mc.options.inactivityFpsLimit().set(InactivityFpsLimit.MINIMIZED);
@@ -130,14 +132,14 @@ public final class Benchmark {
 	private static void world(final Minecraft mc) throws Exception {
 		onMain(mc, () -> {
 			if (mc.getLevelSource().levelExists(WORLD)) {
-				mc.createWorldOpenFlows().openWorld(WORLD, () -> mc.gui.setScreen(new TitleScreen()));
+				mc.createWorldOpenFlows().openWorld(WORLD, () -> mc.setScreen(new TitleScreen()));
 			} else {
-				LevelSettings settings = new LevelSettings(WORLD, GameType.CREATIVE, LevelSettings.DifficultySettings.DEFAULT, true, WorldDataConfiguration.DEFAULT);
+				LevelSettings settings = new LevelSettings(WORLD, GameType.CREATIVE, false, Difficulty.NORMAL, true, new GameRules(WorldDataConfiguration.DEFAULT.enabledFeatures()), WorldDataConfiguration.DEFAULT);
 				mc.createWorldOpenFlows()
 					.createFreshLevel(WORLD, settings, SelectWorldScreen.TEST_OPTIONS, WorldPresets::createNormalWorldDimensions, new TitleScreen());
 			}
 		});
-		waitUntil(mc, () -> mc.level != null && mc.player != null && mc.gui.screen() == null && idle(mc));
+		waitUntil(mc, () -> mc.level != null && mc.player != null && mc.screen == null && idle(mc));
 		setUpWorld(mc);
 		waitForChunks(mc, 120_000L);
 		if (Boolean.getBoolean("rpo.bench.scout")) {
@@ -145,7 +147,7 @@ public final class Benchmark {
 			return;
 		}
 
-		onMain(mc, () -> mc.gui.hud.getChat().clearMessages(false));
+		onMain(mc, () -> mc.gui.getChat().clearMessages(false));
 		startPanning(mc);
 		waitForGo(mc);
 		Thread.sleep(SHOW ? 3000L : 1000L);
@@ -181,32 +183,32 @@ public final class Benchmark {
 		});
 		if (REJOIN) {
 			TitleScreen title = new TitleScreen();
-			onMain(mc, () -> mc.gui.setScreen(new JoinMultiplayerScreen(title)));
+			onMain(mc, () -> mc.setScreen(new JoinMultiplayerScreen(title)));
 			Thread.sleep(500L);
 			measure(mc, () -> {
-				JoinMultiplayerScreen screen = (JoinMultiplayerScreen) mc.gui.screen();
+				JoinMultiplayerScreen screen = (JoinMultiplayerScreen) mc.screen;
 				screen.join(screen.getServers().get(SERVER));
-			}, () -> mc.level != null && mc.player != null && mc.gui.screen() == null && idle(mc) && hasServerPack(mc));
+			}, () -> mc.level != null && mc.player != null && mc.screen == null && idle(mc) && hasServerPack(mc));
 			Thread.sleep(1500L);
 			measure(mc, () -> mc.disconnectFromWorld(ClientLevel.DEFAULT_QUIT_MESSAGE),
-				() -> mc.level == null && idle(mc) && !hasServerPack(mc) && mc.gui.screen() instanceof JoinMultiplayerScreen);
-			onMain(mc, () -> mc.gui.setScreen(title));
+				() -> mc.level == null && idle(mc) && !hasServerPack(mc) && mc.screen instanceof JoinMultiplayerScreen);
+			onMain(mc, () -> mc.setScreen(title));
 			Thread.sleep(1000L);
 		}
 
 		waitForGo(mc);
 		for (int i = 0; i < RUNS; i++) {
 			TitleScreen title = new TitleScreen();
-			onMain(mc, () -> mc.gui.setScreen(new JoinMultiplayerScreen(title)));
+			onMain(mc, () -> mc.setScreen(new JoinMultiplayerScreen(title)));
 			event("multiplayer screen");
 			Thread.sleep(SHOW ? 1500L : 500L);
 			Measure join = measure(mc, () -> {
-				JoinMultiplayerScreen screen = (JoinMultiplayerScreen) mc.gui.screen();
+				JoinMultiplayerScreen screen = (JoinMultiplayerScreen) mc.screen;
 				screen.join(screen.getServers().get(SERVER));
-			}, () -> mc.level != null && mc.player != null && mc.gui.screen() == null && idle(mc) && hasServerPack(mc));
+			}, () -> mc.level != null && mc.player != null && mc.screen == null && idle(mc) && hasServerPack(mc));
 			log("server join: {} ms, longest frame {} ms", join.doneMillis, join.longestFrame);
 			if (SHOW) {
-				onMain(mc, () -> mc.gui.hud.getChat().clearMessages(false));
+				onMain(mc, () -> mc.gui.getChat().clearMessages(false));
 				startPanning(mc);
 				Thread.sleep(4000L);
 				return;
@@ -214,9 +216,9 @@ public final class Benchmark {
 
 			Thread.sleep(1500L);
 			Measure leave = measure(mc, () -> mc.disconnectFromWorld(ClientLevel.DEFAULT_QUIT_MESSAGE),
-				() -> mc.level == null && idle(mc) && !hasServerPack(mc) && mc.gui.screen() instanceof JoinMultiplayerScreen);
+				() -> mc.level == null && idle(mc) && !hasServerPack(mc) && mc.screen instanceof JoinMultiplayerScreen);
 			log("server leave: {} ms, longest frame {} ms", leave.doneMillis, leave.longestFrame);
-			onMain(mc, () -> mc.gui.setScreen(title));
+			onMain(mc, () -> mc.setScreen(title));
 			Thread.sleep(1000L);
 		}
 	}
@@ -224,12 +226,12 @@ public final class Benchmark {
 	private static Measure switchPack(final Minecraft mc, final boolean enable, final boolean menu) throws Exception {
 		PackSelectionScreen[] holder = new PackSelectionScreen[1];
 		onMain(mc, () -> {
-			Screen back = menu ? mc.gui.screen() : null;
+			Screen back = menu ? mc.screen : null;
 			holder[0] = new PackSelectionScreen(mc.getResourcePackRepository(), repository -> {
 				mc.options.updateResourcePacks(repository);
-				mc.gui.setScreen(back);
+				mc.setScreen(back);
 			}, mc.getResourcePackDirectory(), Component.translatable("resourcePack.title"));
-			mc.gui.setScreen(holder[0]);
+			mc.setScreen(holder[0]);
 		});
 		event("pack screen");
 		Thread.sleep(SHOW ? 1500L : 200L);
@@ -265,7 +267,7 @@ public final class Benchmark {
 			}
 
 
-			boolean[] state = CompletableFuture.supplyAsync(() -> new boolean[] {done.get(), mc.gui.overlay() == null && mc.gui.screen() == null}, mc).join();
+			boolean[] state = CompletableFuture.supplyAsync(() -> new boolean[] {done.get(), mc.getOverlay() == null && mc.screen == null}, mc).join();
 			if (blocked < 0L && state[1]) {
 				blocked = (System.nanoTime() - start) / 1_000_000L;
 			}
@@ -365,7 +367,7 @@ public final class Benchmark {
 				waitForChunks(mc, 20_000L);
 				Thread.sleep(500L);
 				int shot = index++;
-				onMain(mc, () -> Screenshot.grab(mc.gameDirectory, "scout-" + shot + ".png", mc.gameRenderer.mainRenderTarget(), 1, message -> {
+				onMain(mc, () -> Screenshot.grab(mc.gameDirectory, "scout-" + shot + ".png", mc.getMainRenderTarget(), 1, message -> {
 				}));
 				log("scout {}: {},{},{},45,25", shot, x, y, z);
 			}
@@ -433,7 +435,7 @@ public final class Benchmark {
 			return;
 		}
 
-		if (mc.gui.screen() == null && mc.gui.overlay() == null) {
+		if (mc.screen == null && mc.getOverlay() == null) {
 			panSeconds += Math.min(gap, 100_000_000L) / 1.0E9;
 		}
 
@@ -449,7 +451,7 @@ public final class Benchmark {
 	}
 
 	private static boolean idle(final Minecraft mc) {
-		return mc.gui.overlay() == null && BackgroundReload.current() == null;
+		return mc.getOverlay() == null && BackgroundReload.current() == null;
 	}
 
 	private static PackSelectionModel model(final PackSelectionScreen screen) {
@@ -484,7 +486,7 @@ public final class Benchmark {
 		int quietChecks = 0;
 		while (quietChecks < 5 && System.currentTimeMillis() < deadline) {
 			boolean done = CompletableFuture.supplyAsync(
-				() -> mc.levelExtractor.countRenderedSections() > 0 && mc.levelRenderer.hasRenderedAllSections(), mc
+				() -> mc.levelRenderer.countRenderedSections() > 0 && mc.levelRenderer.hasRenderedAllSections(), mc
 			).join();
 			quietChecks = done ? quietChecks + 1 : 0;
 			Thread.sleep(done ? 2L : 5L);
