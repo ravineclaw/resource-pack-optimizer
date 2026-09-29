@@ -1,6 +1,5 @@
 package dev.ravineclaw.rpo;
 
-import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -23,6 +22,10 @@ public final class ModCompat {
 		}
 	}
 
+	private static final String INVALIDATE_CALLBACK = "net.fabricmc.fabric.api.client.rendering.v1.InvalidateRenderStateCallback";
+	private static final String INVALIDATE_CALLBACK_V0 = "net.fabricmc.fabric.api.client.render.InvalidateRenderStateCallback";
+	private static final String INVALIDATE_BRIDGE_V0 = "net.fabricmc.fabric.impl.client.rendering.v0.RenderingCallbackInvoker$";
+	private static final String CORE_SHADER_CALLBACK = "net.fabricmc.fabric.api.client.rendering.v1.CoreShaderRegistrationCallback";
 	private static final String FABRIC_SPRITE_FINDER = "net.fabricmc.fabric.api.renderer.v1.model.SpriteFinder";
 	private static final String FABRIC_SPRITE_FINDER_IMPL = "net.fabricmc.fabric.impl.renderer.SpriteFinderImpl";
 	private static final String IRIS_TEXTURE_TRACKER = "net.irisshaders.iris.pbr.TextureTracker";
@@ -33,7 +36,8 @@ public final class ModCompat {
 		Map.entry("net.fabricmc.fabric.mixin.client.model.loading.ModelBakerBakerImplMixin", new Rule(Set.of("wrapModelBake"), ModCompat::noModelPlugins)),
 		Map.entry("net.fabricmc.fabric.mixin.client.model.loading.ReferencedModelsCollectorMixin", new Rule(Set.of("onReturnInit", "onLoadModel", "onAddStandardModels", "onLoadResourceModel", "onAddTopLevelModel"), ModCompat::noModelPlugins)),
 		Map.entry("net.fabricmc.fabric.mixin.client.model.loading.ModelLoaderBakerImplMixin", new Rule(Set.of("wrapInnerBake"), ModCompat::noModelPlugins)),
-		Map.entry("net.fabricmc.fabric.mixin.client.model.loading.ModelLoaderMixin", new Rule(Set.of("onReturnInit", "wrapSingleOuterBake"), ModCompat::noModelPlugins)),
+		Map.entry("net.fabricmc.fabric.mixin.client.model.loading.ModelLoaderMixin", new Rule(Set.of("onReturnInit", "wrapSingleOuterBake", "afterMissingModelInit", "allowRecursiveLoading", "cancelLoadModelFromJson", "doLoadModel", "onAdd"), ModCompat::noModelPlugins)),
+		Map.entry("net.fabricmc.fabric.mixin.client.model.loading.BlockStatesLoaderMixin", new Rule(Set.of("onHeadLoadBlockStates"), ModCompat::noModelPlugins)),
 		Map.entry(
 			"net.fabricmc.fabric.mixin.client.model.loading.BakedModelManagerMixin",
 			new Rule(
@@ -51,7 +55,8 @@ public final class ModCompat {
 					"onReturnUpload",
 					"onUpload",
 					"cancelVanillaDeserialize",
-					"actuallyDeserializeModel"
+					"actuallyDeserializeModel",
+					"loadModelPluginData"
 				),
 				ModCompat::noModelPlugins
 			)
@@ -90,11 +95,16 @@ public final class ModCompat {
 					"renderWeather",
 					"renderCloud",
 					"renderSky",
+					"onChunkDebugRender",
+					"resetBlockOutlineBuffer",
 					"onReload"
 				),
-				ModCompat::noInvalidateListeners
+				() -> noListeners(INVALIDATE_CALLBACK)
 			)
 		),
+		Map.entry("net.fabricmc.fabric.mixin.client.rendering.shader.GameRendererMixin", new Rule(Set.of("registerShaders"), () -> noListeners(CORE_SHADER_CALLBACK))),
+		Map.entry("net.fabricmc.fabric.mixin.client.rendering.shader.ShaderProgramMixin", new Rule(Set.of("allowNoneMinecraftId", "modifyId", "modifyStageId"), () -> true)),
+		Map.entry("net.fabricmc.fabric.mixin.screen.GameRendererMixin", new Rule(Set.of("onRenderScreen"), () -> true)),
 		Map.entry("net.fabricmc.fabric.mixin.client.sound.SoundSystemMixin", new Rule(Set.of("getStream"), () -> true)),
 		Map.entry("net.caffeinemc.mods.sodium.mixin.features.textures.scan.SpriteContentsMixin", new Rule(Set.of("beforeGenerateMipLevels"), () -> true)),
 		Map.entry("net.caffeinemc.mods.sodium.mixin.core.render.TextureAtlasMixin", new Rule(Set.of("deleteSpriteFinder"), () -> sodiumSpriteFinder() != null)),
@@ -283,13 +293,26 @@ public final class ModCompat {
 		return isEmpty(staticField(deserializers, "DESERIALIZERS"));
 	}
 
-	private static boolean noInvalidateListeners() throws ReflectiveOperationException {
-		Class<?> callback = Class.forName("net.fabricmc.fabric.api.client.rendering.v1.InvalidateRenderStateCallback", false, ModCompat.class.getClassLoader());
+	private static boolean noListeners(final String type) throws ReflectiveOperationException {
+		for (Object listener : listeners(type)) {
+			if (!listener.getClass().getName().startsWith(INVALIDATE_BRIDGE_V0) || listeners(INVALIDATE_CALLBACK_V0).length != 0) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	private static Object[] listeners(final String type) throws ReflectiveOperationException {
+		Class<?> callback = Class.forName(type, false, ModCompat.class.getClassLoader());
 		Object event = staticField(callback, "EVENT");
 		Field handlers = event.getClass().getDeclaredField("handlers");
 		handlers.setAccessible(true);
-		Object array = handlers.get(event);
-		return array != null && array.getClass().isArray() && Array.getLength(array) == 0;
+		if (!(handlers.get(event) instanceof Object[] array)) {
+			throw new ReflectiveOperationException("no handler array");
+		}
+
+		return array;
 	}
 
 	private static Object staticField(final Class<?> owner, final String name) throws ReflectiveOperationException {
