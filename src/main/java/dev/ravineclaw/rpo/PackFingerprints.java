@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.lang.ref.WeakReference;
+import java.lang.reflect.Field;
 import java.nio.file.FileSystems;
 import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
@@ -19,6 +20,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
@@ -33,6 +35,7 @@ import net.minecraft.server.packs.PackResources;
 import net.minecraft.server.packs.PackType;
 import net.minecraft.server.packs.PathPackResources;
 import net.minecraft.server.packs.VanillaPackResources;
+import org.jetbrains.annotations.Nullable;
 
 public final class PackFingerprints {
 	public static final long ABSENT = -1L;
@@ -41,6 +44,7 @@ public final class PackFingerprints {
 	private static final long IMMUTABLE_BASE = -16L;
 
 	private static final Map<PackResources, Source> SOURCES = Collections.synchronizedMap(new WeakHashMap<>());
+	private static final Set<PackResources> PER_RELOAD = Collections.newSetFromMap(new WeakHashMap<>());
 	private static final Map<String, Integer> IMMUTABLE_IDS = new ConcurrentHashMap<>();
 	private static final Source UNKNOWN_SOURCE = new Source() {
 		@Override
@@ -60,8 +64,73 @@ public final class PackFingerprints {
 	private PackFingerprints() {
 	}
 
-	public static void append(final PackResources pack, final PackType type, final ResourceLocation id, final LongArrayList out) {
-		source(pack).append(type, id, id.getNamespace() + "/" + id.getPath(), out);
+	public static StackSources sources(final List<PackResources> packs, final PackType type, final List<String> filters) {
+		Source[] sources = new Source[packs.size()];
+		for (int i = 0; i < sources.length; i++) {
+			sources[i] = source(packs.get(i));
+		}
+
+		return new StackSources(packs, type, filters, sources);
+	}
+
+	public static final class StackSources {
+		private final List<PackResources> packs;
+		private final PackType type;
+		private final List<String> filters;
+		private final Source[] sources;
+		private final Map<String, int[]> byNamespace = new ConcurrentHashMap<>();
+		private volatile @Nullable Set<String> @Nullable [] namespaces;
+
+		private StackSources(final List<PackResources> packs, final PackType type, final List<String> filters, final Source[] sources) {
+			this.packs = packs;
+			this.type = type;
+			this.filters = filters;
+			this.sources = sources;
+		}
+
+		public int[] candidates(final String namespace) {
+			return this.byNamespace.computeIfAbsent(namespace, this::findCandidates);
+		}
+
+		public boolean filtered(final int index) {
+			return !this.filters.get(index).isEmpty();
+		}
+
+		public void append(final int index, final PackType type, final ResourceLocation id, final String path, final LongArrayList out) {
+			this.sources[index].append(type, id, path, out);
+		}
+
+		private int[] findCandidates(final String namespace) {
+			Set<String>[] namespaces = this.namespaces();
+			int[] found = new int[namespaces.length];
+			int count = 0;
+			for (int i = 0; i < namespaces.length; i++) {
+				if (namespaces[i] == null || namespaces[i].contains(namespace) || this.filtered(i)) {
+					found[count++] = i;
+				}
+			}
+
+			return Arrays.copyOf(found, count);
+		}
+
+		@SuppressWarnings("unchecked")
+		private Set<String>[] namespaces() {
+			Set<String>[] namespaces = this.namespaces;
+			if (namespaces == null) {
+				namespaces = new Set[this.packs.size()];
+				for (int i = 0; i < namespaces.length; i++) {
+					try {
+						namespaces[i] = Set.copyOf(this.packs.get(i).getNamespaces(this.type));
+					} catch (RuntimeException e) {
+						namespaces[i] = null;
+					}
+				}
+
+				this.namespaces = namespaces;
+			}
+
+			return namespaces;
+		}
 	}
 
 	public static long version(final PackResources pack, final PackType type) {
@@ -130,39 +199,96 @@ public final class PackFingerprints {
 					layers.add(source(layer));
 				}
 
-				return new Source() {
-					@Override
-					public void append(final PackType type, final ResourceLocation id, final String path, final LongArrayList out) {
-						for (Source layer : layers) {
-							layer.append(type, id, path, out);
-						}
-					}
-
-					@Override
-					public long version(final PackType type) {
-						long hash = hashStart();
-						for (Source layer : layers) {
-							long version = layer.version(type);
-							if (version == UNKNOWN) {
-								return UNKNOWN;
-							}
-
-							hash = hashMix(hash, version);
-						}
-
-						return hash;
-					}
-				};
+				return composite(layers);
 			}
 
-			if (pack.getClass().getName().startsWith("net.fabricmc.fabric.impl.resource.") && !FabricLoader.getInstance().isDevelopmentEnvironment()) {
-				return immutable(pack);
+			if (pack.getClass().getName().startsWith("net.fabricmc.fabric.impl.resource.")) {
+				return FabricLoader.getInstance().isDevelopmentEnvironment() ? modFolders(pack) : immutable(pack);
 			}
 		} catch (RuntimeException e) {
 			ResourcePackOptimizer.LOGGER.debug("Can't fingerprint pack {}", pack.packId(), e);
 		}
 
 		return UNKNOWN_SOURCE;
+	}
+
+	public static void newReload() {
+		synchronized (PER_RELOAD) {
+			for (PackResources pack : PER_RELOAD) {
+				SOURCES.remove(pack);
+			}
+
+			PER_RELOAD.clear();
+		}
+	}
+
+	private static Source modFolders(final PackResources pack) {
+		List<?> paths;
+		try {
+			Field field = pack.getClass().getDeclaredField("basePaths");
+			field.setAccessible(true);
+			if (!(field.get(pack) instanceof List<?> list) || list.isEmpty()) {
+				return UNKNOWN_SOURCE;
+			}
+
+			paths = list;
+		} catch (ReflectiveOperationException | RuntimeException e) {
+			return UNKNOWN_SOURCE;
+		}
+
+		List<Source> layers = new ArrayList<>();
+		boolean archived = false;
+		for (Object path : paths) {
+			if (!(path instanceof Path root)) {
+				return UNKNOWN_SOURCE;
+			}
+
+			if (root.getFileSystem() == FileSystems.getDefault()) {
+				layers.add(new FolderSource(root));
+			} else {
+				archived = true;
+			}
+		}
+
+		if (layers.isEmpty()) {
+			return immutable(pack);
+		}
+
+		if (archived) {
+			layers.add(immutable(pack));
+		}
+
+		synchronized (PER_RELOAD) {
+			PER_RELOAD.add(pack);
+		}
+
+		return composite(layers);
+	}
+
+	private static Source composite(final List<Source> layers) {
+		return new Source() {
+			@Override
+			public void append(final PackType type, final ResourceLocation id, final String path, final LongArrayList out) {
+				for (Source layer : layers) {
+					layer.append(type, id, path, out);
+				}
+			}
+
+			@Override
+			public long version(final PackType type) {
+				long hash = hashStart();
+				for (Source layer : layers) {
+					long version = layer.version(type);
+					if (version == UNKNOWN) {
+						return UNKNOWN;
+					}
+
+					hash = hashMix(hash, version);
+				}
+
+				return hash;
+			}
+		};
 	}
 
 	private static Source immutable(final PackResources pack) {
@@ -200,7 +326,28 @@ public final class PackFingerprints {
 		return crc << 32 | size;
 	}
 
-	private record ZipSource(ZipAccess access, String prefix) implements Source {
+	private static final class ZipSource implements Source {
+		private final ZipAccess access;
+		private final String prefix;
+		private volatile @Nullable ZipFile indexedFile;
+		private volatile @Nullable ZipIndex index;
+
+		private ZipSource(final ZipAccess access, final String prefix) {
+			this.access = access;
+			this.prefix = prefix;
+		}
+
+		private ZipIndex index(final ZipFile zipFile) {
+			ZipIndex index = this.index;
+			if (index == null || this.indexedFile != zipFile) {
+				index = ZipIndex.of(zipFile);
+				this.index = index;
+				this.indexedFile = zipFile;
+			}
+
+			return index;
+		}
+
 		static Source of(final PackResources pack) {
 			ZipPack zipPack = (ZipPack)pack;
 			ZipAccess access = zipPack.rpo$zipAccess();
@@ -220,7 +367,7 @@ public final class PackFingerprints {
 				return hashMix(hashStart(), ABSENT);
 			}
 
-			return hashMix(hashString(this.prefix), ZipIndex.of(zipFile).contentHash());
+			return hashMix(hashString(this.prefix), this.index(zipFile).contentHash());
 		}
 
 		@Override
@@ -232,7 +379,7 @@ public final class PackFingerprints {
 			}
 
 			String name = type.getDirectory() + "/" + path;
-			ZipEntry entry = zipFile.getEntry(this.prefix.isEmpty() ? name : this.prefix + "/" + name);
+			ZipEntry entry = this.index(zipFile).entry(zipFile, this.prefix.isEmpty() ? name : this.prefix + "/" + name);
 			if (entry == null) {
 				out.add(ABSENT);
 			} else if (entry.isDirectory()) {

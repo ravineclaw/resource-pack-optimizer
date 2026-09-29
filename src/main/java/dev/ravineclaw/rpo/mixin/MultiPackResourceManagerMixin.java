@@ -2,6 +2,7 @@ package dev.ravineclaw.rpo.mixin;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import dev.ravineclaw.rpo.PackFingerprints;
 import dev.ravineclaw.rpo.PackStack;
 import java.util.ArrayList;
 import java.util.List;
@@ -30,6 +31,8 @@ public abstract class MultiPackResourceManagerMixin implements PackStack {
 	private List<String> rpo$filters;
 	@Unique
 	private volatile long @Nullable [] rpo$versions;
+	@Unique
+	private volatile PackFingerprints.@Nullable StackSources rpo$sources;
 
 	@WrapOperation(
 		method = "<init>",
@@ -92,5 +95,15 @@ public abstract class MultiPackResourceManagerMixin implements PackStack {
 	@Override
 	public void rpo$setVersions(final long[] versions) {
 		this.rpo$versions = versions;
+	}
+
+	@Override
+	public PackFingerprints.@Nullable StackSources rpo$sources() {
+		return this.rpo$sources;
+	}
+
+	@Override
+	public void rpo$setSources(final PackFingerprints.StackSources sources) {
+		this.rpo$sources = sources;
 	}
 }

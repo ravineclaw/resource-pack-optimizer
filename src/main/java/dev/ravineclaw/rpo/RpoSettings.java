@@ -10,13 +10,47 @@ import net.fabricmc.loader.api.FabricLoader;
 
 public final class RpoSettings {
 	private static final String KEY = "enabled";
-	private static final boolean DISABLED_THIS_SESSION = Boolean.getBoolean("rpo.disable") || !enabledInFile();
+	private static final boolean MIXINS_DISABLED = Boolean.getBoolean("rpo.disable");
+	private static volatile boolean requested = !MIXINS_DISABLED && enabledInFile();
+	private static volatile boolean active = requested;
 
 	private RpoSettings() {
 	}
 
-	public static boolean disabledThisSession() {
-		return DISABLED_THIS_SESSION;
+	public static boolean mixinsDisabled() {
+		return MIXINS_DISABLED;
+	}
+
+	public static boolean active() {
+		return active;
+	}
+
+	public static boolean requested() {
+		return requested;
+	}
+
+	public static void request(final boolean on) {
+		requested = on && !MIXINS_DISABLED;
+	}
+
+	public static void beginReload() {
+		boolean want = requested;
+		if (want == active) {
+			return;
+		}
+
+		active = want;
+		if (want) {
+			ResourcePackOptimizer.LOGGER.info("Resource Pack Optimizer turned on");
+			SpriteDiskCache.enable();
+		} else {
+			ResourcePackOptimizer.LOGGER.info("Resource Pack Optimizer turned off, reloading like vanilla");
+			AtlasReuse.clear();
+			AtlasBuilder.clear();
+			AtlasStaging.discardAll();
+			SpriteCache.clear();
+			SpriteDiskCache.deleteLater();
+		}
 	}
 
 	public static boolean enabledInFile() {
