@@ -16,8 +16,10 @@ import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
@@ -38,7 +40,7 @@ import org.lwjgl.system.MemoryUtil;
 
 public final class SpriteDiskCache {
 	private static final long MAGIC = 0x5250_4F53_5052_5431L;
-	private static final int FORMAT = 1;
+	private static final int FORMAT = 2;
 	private static final long DISK_BUDGET = 256L << 20;
 	private static final long SAVE_DELAY_MILLIS = 2000L;
 	private static final int PREFETCH_THREADS = Math.clamp(Runtime.getRuntime().availableProcessors() / 4, 1, 4);
@@ -46,6 +48,9 @@ public final class SpriteDiskCache {
 	private static final AtomicBoolean DIRTY = new AtomicBoolean();
 	private static final AtomicInteger SAVE_REQUEST = new AtomicInteger();
 	private static final CompletableFuture<Void> PREFETCHED = new CompletableFuture<>();
+	private static final CompletableFuture<Void> INDEX_READ = new CompletableFuture<>();
+	private static final Map<SpriteCache.SourceKey, SpriteCache.Key> STORED_SOURCES = new ConcurrentHashMap<>();
+	private static volatile boolean prefetchStarted;
 	private static final Executor SAVER = Executors.newSingleThreadExecutor(task -> {
 		Thread thread = new Thread(task, "RPO sprite cache writer");
 		thread.setDaemon(true);
@@ -90,6 +95,7 @@ public final class SpriteDiskCache {
 	}
 
 	public static void prefetch() {
+		prefetchStarted = true;
 		Thread thread = new Thread(SpriteDiskCache::runPrefetch, "RPO sprite cache");
 		thread.setDaemon(true);
 		thread.setPriority(Thread.NORM_PRIORITY - 1);
@@ -122,6 +128,14 @@ public final class SpriteDiskCache {
 				return;
 			}
 
+			for (Map.Entry<SpriteCache.SourceKey, SpriteCache.Key> source : STORED_SOURCES.entrySet()) {
+				if (STORED.containsKey(source.getValue())) {
+					SpriteCache.adoptSource(source.getKey(), source.getValue());
+				}
+			}
+
+			STORED_SOURCES.clear();
+			INDEX_READ.complete(null);
 			channel = opened;
 			List<Stored> all = new ArrayList<>(STORED.values());
 			AtomicInteger next = new AtomicInteger();
@@ -150,6 +164,8 @@ public final class SpriteDiskCache {
 		} catch (Throwable t) {
 			ResourcePackOptimizer.LOGGER.info("Couldn't read the sprite cache, it will be rebuilt: {}", t.toString());
 		} finally {
+			STORED_SOURCES.clear();
+			INDEX_READ.complete(null);
 			closeChannel();
 			PREFETCHED.complete(null);
 		}
@@ -195,6 +211,12 @@ public final class SpriteDiskCache {
 
 				STORED.put(key, new Stored(key, original, chains));
 			}
+
+			int sources = in.readInt();
+			for (int i = 0; i < sources; i++) {
+				SpriteCache.SourceKey source = new SpriteCache.SourceKey(in.readUTF(), in.readUTF(), in.readLong(), in.readLong(), in.readLong(), in.readLong());
+				STORED_SOURCES.put(source, new SpriteCache.Key(in.readLong(), in.readLong(), in.readInt()));
+			}
 		} catch (EOFException | IllegalArgumentException e) {
 			return false;
 		}
@@ -212,6 +234,16 @@ public final class SpriteDiskCache {
 		out.writeLong(image.offset());
 		out.writeInt(image.compressed());
 		out.writeLong(image.checksum());
+	}
+
+	public static void awaitIndex() {
+		if (prefetchStarted && !INDEX_READ.isDone()) {
+			try {
+				INDEX_READ.get(2L, TimeUnit.SECONDS);
+			} catch (Exception e) {
+				return;
+			}
+		}
 	}
 
 	public static void awaitIfStored(final SpriteCache.Key key) {
@@ -395,6 +427,32 @@ public final class SpriteDiskCache {
 							writeImage(index, level);
 						}
 					}
+				}
+
+				Set<SpriteCache.Key> keys = new HashSet<>();
+				for (Written record : pending) {
+					keys.add(record.key());
+				}
+
+				List<Map.Entry<SpriteCache.SourceKey, SpriteCache.Key>> sources = new ArrayList<>();
+				for (Map.Entry<SpriteCache.SourceKey, SpriteCache.Key> source : SpriteCache.sources().entrySet()) {
+					if (keys.contains(source.getValue())) {
+						sources.add(source);
+					}
+				}
+
+				index.writeInt(sources.size());
+				for (Map.Entry<SpriteCache.SourceKey, SpriteCache.Key> source : sources) {
+					SpriteCache.SourceKey from = source.getKey();
+					index.writeUTF(from.origin());
+					index.writeUTF(from.name());
+					index.writeLong(from.crc());
+					index.writeLong(from.size());
+					index.writeLong(from.compressedSize());
+					index.writeLong(from.time());
+					index.writeLong(source.getValue().first());
+					index.writeLong(source.getValue().second());
+					index.writeInt(source.getValue().length());
 				}
 
 				index.flush();

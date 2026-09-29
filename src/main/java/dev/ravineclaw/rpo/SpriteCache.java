@@ -23,6 +23,7 @@ import net.minecraft.client.renderer.texture.MipmapStrategy;
 import net.minecraft.client.renderer.texture.SpriteContents;
 import net.minecraft.client.renderer.texture.atlas.SpriteResourceLoader;
 import net.minecraft.resources.Identifier;
+import net.minecraft.server.packs.resources.IoSupplier;
 import net.minecraft.server.packs.resources.Resource;
 import org.jspecify.annotations.Nullable;
 import org.lwjgl.system.MemoryUtil;
@@ -43,8 +44,8 @@ public final class SpriteCache {
 	private static final Map<Key, Entry> ENTRIES = new ConcurrentHashMap<>();
 	private static final Map<SourceKey, Key> SOURCES = new ConcurrentHashMap<>();
 	private static final int MAX_SOURCES = 1 << 17;
-	private static final Map<ZipFile, ZipId> ZIP_IDS = new WeakHashMap<>();
-	private static final ZipId NO_ZIP_ID = new ZipId("", -1L, -1L);
+	private static final Map<ZipFile, String> ZIP_IDS = new WeakHashMap<>();
+	private static final String NO_ZIP_ID = "";
 	private static final long RACY_MILLIS = 3000L;
 	private static final AtomicLong BYTES = new AtomicLong();
 	private static final AtomicInteger GENERATION = new AtomicInteger();
@@ -61,10 +62,7 @@ public final class SpriteCache {
 	public record Key(long first, long second, int length) {
 	}
 
-	private record ZipId(String path, long size, long modified) {
-	}
-
-	private record SourceKey(ZipId zip, String name, long crc, long size, long compressedSize, long time) {
+	public record SourceKey(String origin, String name, long crc, long size, long compressedSize, long time) {
 	}
 
 	public record MipKey(boolean item, MipmapStrategy strategy, float alphaCutoffBias) {
@@ -196,6 +194,7 @@ public final class SpriteCache {
 		Resource input = resource;
 		pending.source = sourceKey(resource);
 		if (pending.source != null) {
+			SpriteDiskCache.awaitIndex();
 			pending.known = SOURCES.get(pending.source);
 			if (pending.known != null) {
 				input = new Resource(resource.source(), () -> new DeferredStream(pending, resource), resource::metadata);
@@ -300,34 +299,39 @@ public final class SpriteCache {
 	}
 
 	private static @Nullable SourceKey sourceKey(final Resource resource) {
-		if (!(((ResourceAccessor)resource).rpo$getStreamSupplier() instanceof ZipEntrySupplier supplier)) {
+		IoSupplier<InputStream> supplier = ((ResourceAccessor)resource).rpo$getStreamSupplier();
+		if (supplier instanceof FixedFileSupplier fixed) {
+			return new SourceKey(fixed.origin(), fixed.name(), -1L, -1L, -1L, -1L);
+		}
+
+		if (!(supplier instanceof ZipEntrySupplier zipSupplier)) {
 			return null;
 		}
 
-		ZipEntry entry = supplier.entry();
+		ZipEntry entry = zipSupplier.entry();
 		if (entry.getCrc() < 0L || entry.getSize() < 0L || entry.getCompressedSize() < 0L) {
 			return null;
 		}
 
-		ZipId zip = zipId(supplier.zipFile());
+		String zip = zipId(zipSupplier.zipFile());
 		return zip == null ? null : new SourceKey(zip, entry.getName(), entry.getCrc(), entry.getSize(), entry.getCompressedSize(), entry.getTime());
 	}
 
-	private static @Nullable ZipId zipId(final ZipFile zipFile) {
+	private static @Nullable String zipId(final ZipFile zipFile) {
 		synchronized (ZIP_IDS) {
-			ZipId known = ZIP_IDS.get(zipFile);
+			String known = ZIP_IDS.get(zipFile);
 			if (known != null) {
-				return known == NO_ZIP_ID ? null : known;
+				return known.isEmpty() ? null : known;
 			}
 		}
 
-		ZipId id;
+		String id;
 		try {
 			Path path = Path.of(zipFile.getName());
 			BasicFileAttributes attributes = Files.readAttributes(path, BasicFileAttributes.class);
 			long modified = attributes.lastModifiedTime().toMillis();
 			id = System.currentTimeMillis() - modified > RACY_MILLIS
-				? new ZipId(path.toAbsolutePath().normalize().toString(), attributes.size(), modified)
+				? "zip|" + path.toAbsolutePath().normalize() + "|" + attributes.size() + "|" + modified
 				: NO_ZIP_ID;
 		} catch (IOException | RuntimeException e) {
 			id = NO_ZIP_ID;
@@ -337,7 +341,17 @@ public final class SpriteCache {
 			ZIP_IDS.put(zipFile, id);
 		}
 
-		return id == NO_ZIP_ID ? null : id;
+		return id.isEmpty() ? null : id;
+	}
+
+	public static Map<SourceKey, Key> sources() {
+		return Map.copyOf(SOURCES);
+	}
+
+	public static void adoptSource(final SourceKey source, final Key key) {
+		if (SOURCES.size() < MAX_SOURCES) {
+			SOURCES.putIfAbsent(source, key);
+		}
 	}
 
 	private static @Nullable NativeImage copyOriginal(final Entry entry) {
