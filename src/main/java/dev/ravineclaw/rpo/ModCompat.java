@@ -85,6 +85,7 @@ public final class ModCompat {
 				() -> true
 			)
 		),
+		Map.entry("net.fabricmc.fabric.mixin.client.sound.SoundEngineMixin", new Rule(Set.of("getStream"), () -> true)),
 		Map.entry("net.caffeinemc.mods.sodium.mixin.core.render.TextureAtlasMixin", new Rule(Set.of("deleteSpriteFinder"), () -> sodiumSpriteFinder() != null)),
 		Map.entry("net.caffeinemc.mods.sodium.mixin.features.textures.animations.tracking.TextureAtlasMixin", new Rule(Set.of("preReturnSprite"), () -> true)),
 		Map.entry("net.caffeinemc.mods.sodium.mixin.features.textures.animations.tracking.AtlasManagerMixin", new Rule(Set.of("catchUsedSprites"), () -> true)),

@@ -379,7 +379,10 @@ public final class SelfTest {
 		CompletableFuture<Void> shotWritten = null;
 		while (shot != null) {
 			shotWritten = CompletableFuture.supplyAsync(() -> state.getAsBoolean() ? screenshotNow(minecraft, shot) : null, minecraft).join();
-			if (shotWritten != null || System.nanoTime() - start > 10_000_000_000L) {
+			boolean finished = CompletableFuture.supplyAsync(
+				() -> minecraft.gui.overlay() == null && BackgroundReload.current() == null && !TerrainHandoff.offered() && !TerrainHandoff.active(), minecraft
+			).join();
+			if (shotWritten != null || finished || System.nanoTime() - start > 10_000_000_000L) {
 				break;
 			}
 
