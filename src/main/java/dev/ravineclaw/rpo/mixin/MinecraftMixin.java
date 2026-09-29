@@ -7,6 +7,7 @@ import dev.ravineclaw.rpo.BackgroundReload;
 import dev.ravineclaw.rpo.FramePump;
 import dev.ravineclaw.rpo.ReloadTimeline;
 import dev.ravineclaw.rpo.RpoSettings;
+import dev.ravineclaw.rpo.TerrainHandoff;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.LoadingOverlay;
 import net.minecraft.client.gui.screens.Overlay;
@@ -49,5 +50,6 @@ public abstract class MinecraftMixin {
 	@Inject(method = {"runTick", "doWorldLoad"}, at = @At(value = "INVOKE", target = "Lnet/minecraft/client/Minecraft;runAllTasks()V"))
 	private void rpo$pumpFrameWork(final CallbackInfo ci) {
 		FramePump.pump();
+		TerrainHandoff.tick();
 	}
 }

@@ -8,7 +8,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
@@ -26,8 +28,10 @@ import net.minecraft.world.level.LevelSettings;
 import net.minecraft.world.level.WorldDataConfiguration;
 import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.levelgen.presets.WorldPresets;
+import net.minecraft.world.phys.Vec3;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.core.config.Configurator;
+import org.jspecify.annotations.Nullable;
 import org.spongepowered.asm.mixin.MixinEnvironment;
 
 public final class SelfTest {
@@ -137,10 +141,11 @@ public final class SelfTest {
 
 		int mipmaps = minecraft.options.mipmapLevels().get();
 		setMipmaps(minecraft, mipmaps == 4 ? 2 : 4);
-		reload(minecraft, "world mipmap change", true);
+		reload(minecraft, "world mipmap change", true, System.getProperty("rpo.selftest.tag", "run") + "-world-mip-switch", TerrainHandoff::active);
 		setMipmaps(minecraft, mipmaps);
 		reload(minecraft, "world mipmap restore", true);
 
+		moveDuringHandoff(minecraft, mipmaps);
 		reload(minecraft, "world final reload", true);
 		screenshot(minecraft, System.getProperty("rpo.selftest.tag", "run") + "-world");
 	}
@@ -196,7 +201,13 @@ public final class SelfTest {
 		List<String> without = new ArrayList<>(selected);
 		without.remove(packId);
 		CompletableFuture.runAsync(() -> repository.setSelected(without), minecraft).join();
-		reload(minecraft, "world without " + packId, true);
+		reload(
+			minecraft,
+			"world without " + packId,
+			true,
+			packId.equals(TEXTURE_PACK) ? System.getProperty("rpo.selftest.tag", "run") + "-world-swapped" : null,
+			() -> TerrainHandoff.offered() && !TerrainHandoff.active()
+		);
 		CompletableFuture.runAsync(() -> repository.setSelected(selected), minecraft).join();
 		reload(minecraft, "world with " + packId, true);
 	}
@@ -237,6 +248,49 @@ public final class SelfTest {
 		log("folder probe unchanged: block atlas rebuilt = {} (expected false)", !ReloadChanges.isUnchanged(ReloadChanges.BLOCK_ATLAS));
 	}
 
+	private static void moveDuringHandoff(final Minecraft minecraft, final int mipmaps) throws InterruptedException {
+		Vec3 home = CompletableFuture.supplyAsync(() -> minecraft.player != null ? minecraft.player.position() : null, minecraft).join();
+		if (home == null) {
+			return;
+		}
+
+		String handoff = TerrainHandoff.lastResult();
+		setMipmaps(minecraft, mipmaps == 4 ? 2 : 4);
+		CompletableFuture.runAsync(minecraft::reloadResourcePacks, minecraft).join();
+		long start = System.nanoTime();
+		boolean moved = false;
+		while (!moved && System.nanoTime() - start < 10_000_000_000L) {
+			moved = CompletableFuture.supplyAsync(() -> {
+				if (!TerrainHandoff.active() || minecraft.player == null) {
+					return false;
+				}
+
+				minecraft.player.setPos(home.x + 160.0, home.y, home.z + 160.0);
+				return true;
+			}, minecraft).join();
+			if (!moved) {
+				Thread.sleep(1L);
+			}
+		}
+
+		waitUntil(minecraft, () -> minecraft.getOverlay() == null && BackgroundReload.current() == null);
+		waitForChunks(minecraft, 60_000L);
+		long deadline = System.currentTimeMillis() + 10_000L;
+		while (TerrainHandoff.active() && System.currentTimeMillis() < deadline) {
+			Thread.sleep(5L);
+		}
+
+		String result = TerrainHandoff.lastResult();
+		log("world moved 160 blocks during the chunk handoff: moved = {}, chunk handoff {}", moved, result != null && !result.equals(handoff) ? result : "none");
+		CompletableFuture.runAsync(() -> {
+			if (minecraft.player != null) {
+				minecraft.player.setPos(home.x, home.y, home.z);
+			}
+		}, minecraft).join();
+		setMipmaps(minecraft, mipmaps);
+		reload(minecraft, "world mipmap restore after moving", true);
+	}
+
 	private static void setMipmaps(final Minecraft minecraft, final int levels) {
 		CompletableFuture.runAsync(() -> {
 			minecraft.options.mipmapLevels().set(levels);
@@ -250,20 +304,24 @@ public final class SelfTest {
 		}
 
 		Thread.sleep(1000L);
+		CompletableFuture.supplyAsync(() -> screenshotNow(minecraft, name), minecraft).join().join();
+	}
+
+	private static CompletableFuture<Void> screenshotNow(final Minecraft minecraft, final String name) {
 		Path file = minecraft.gameDirectory.toPath().resolve("rpo-dump").resolve(name + ".png");
 		CompletableFuture<Void> written = new CompletableFuture<>();
-		CompletableFuture.runAsync(() -> Screenshot.takeScreenshot(minecraft.gameRenderer.mainRenderTarget(), image -> {
+		Screenshot.takeScreenshot(minecraft.gameRenderer.mainRenderTarget(), image -> {
 			try (image) {
 				Files.createDirectories(file.getParent());
 				image.writeToFile(file);
+				log("screenshot {}", file);
 			} catch (Exception e) {
 				ResourcePackOptimizer.LOGGER.error("[selftest] screenshot failed", e);
 			} finally {
 				written.complete(null);
 			}
-		}), minecraft).join();
-		written.join();
-		log("screenshot {}", file);
+		});
+		return written;
 	}
 
 	private static void dump(final Minecraft minecraft, final Path directory) {
@@ -276,7 +334,14 @@ public final class SelfTest {
 	}
 
 	private static void reload(final Minecraft minecraft, final String label, final boolean waitForChunks) throws InterruptedException {
+		reload(minecraft, label, waitForChunks, null, TerrainHandoff::active);
+	}
+
+	private static void reload(
+		final Minecraft minecraft, final String label, final boolean waitForChunks, final @Nullable String shot, final BooleanSupplier state
+	) throws InterruptedException {
 		CompletableFuture.runAsync(ReloadTimeline::resetFrames, minecraft).join();
+		String handoff = TerrainHandoff.lastResult();
 		long start = System.nanoTime();
 		boolean blocking = CompletableFuture.supplyAsync(() -> {
 			minecraft.reloadResourcePacks();
@@ -286,8 +351,26 @@ public final class SelfTest {
 			log("{}: reload shows a blocking overlay", label);
 		}
 
+		CompletableFuture<Void> shotWritten = null;
+		while (shot != null) {
+			shotWritten = CompletableFuture.supplyAsync(() -> state.getAsBoolean() ? screenshotNow(minecraft, shot) : null, minecraft).join();
+			if (shotWritten != null || System.nanoTime() - start > 10_000_000_000L) {
+				break;
+			}
+
+			Thread.sleep(1L);
+		}
+
+		if (shot != null) {
+			log("{}: screenshot {} taken: {}", label, shot, shotWritten != null);
+		}
+
 		waitUntil(minecraft, () -> minecraft.getOverlay() == null && BackgroundReload.current() == null);
 		long overlay = (System.nanoTime() - start) / 1_000_000L;
+		if (shotWritten != null) {
+			shotWritten.join();
+		}
+
 		long frame = ReloadTimeline.longestFrameMillis();
 		ReloadTimeline.log(label);
 		if (!waitForChunks) {
@@ -297,6 +380,48 @@ public final class SelfTest {
 
 		waitForChunks(minecraft, 60_000L);
 		log("{}: until overlay gone {} ms, until all chunks built {} ms, longest frame {} ms", label, overlay, (System.nanoTime() - start) / 1_000_000L, frame);
+		long deadline = System.currentTimeMillis() + 10_000L;
+		while (TerrainHandoff.active() && System.currentTimeMillis() < deadline) {
+			Thread.sleep(5L);
+		}
+
+		String result = TerrainHandoff.lastResult();
+		if (result != null && !result.equals(handoff)) {
+			log("{}: chunk handoff {}", label, result);
+		}
+
+		if (shotWritten != null) {
+			String after = shot + "-after";
+			CompletableFuture.supplyAsync(() -> screenshotNow(minecraft, after), minecraft).join().join();
+			log("{}: {} differs from the rebuilt frame in {}% of pixels (expected < 1)", label, shot, differingPercent(minecraft, shot, after));
+		}
+	}
+
+	private static String differingPercent(final Minecraft minecraft, final String first, final String second) {
+		Path directory = minecraft.gameDirectory.toPath().resolve("rpo-dump");
+		try (NativeImage a = NativeImage.read(Files.readAllBytes(directory.resolve(first + ".png")));
+			NativeImage b = NativeImage.read(Files.readAllBytes(directory.resolve(second + ".png")))) {
+			if (a.getWidth() != b.getWidth() || a.getHeight() != b.getHeight()) {
+				return "100 (size differs)";
+			}
+
+			long differing = 0;
+			int top = a.getHeight() / 20;
+			for (int y = top; y < a.getHeight(); y++) {
+				for (int x = 0; x < a.getWidth(); x++) {
+					int p = a.getPixel(x, y);
+					int q = b.getPixel(x, y);
+					int delta = Math.abs((p & 0xFF) - (q & 0xFF)) + Math.abs((p >> 8 & 0xFF) - (q >> 8 & 0xFF)) + Math.abs((p >> 16 & 0xFF) - (q >> 16 & 0xFF));
+					if (delta > 30) {
+						differing++;
+					}
+				}
+			}
+
+			return String.format(Locale.ROOT, "%.3f", differing * 100.0 / ((long)a.getWidth() * (a.getHeight() - top)));
+		} catch (Exception e) {
+			return "unknown (" + e + ")";
+		}
 	}
 
 	private static void waitForChunks(final Minecraft minecraft, final long timeoutMillis) throws InterruptedException {
