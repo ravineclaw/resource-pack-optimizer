@@ -2,6 +2,8 @@ package dev.ravineclaw.rpo;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
+import dev.ravineclaw.rpo.mixin.TextureAtlasAccessor;
+import java.lang.reflect.Method;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -12,6 +14,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.gui.screens.worldselection.SelectWorldScreen;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.server.packs.repository.PackRepository;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.level.GameType;
@@ -121,7 +124,9 @@ public final class SelfTest {
 
 		togglePack(minecraft, SOUND_PACK);
 		togglePack(minecraft, TEXTURE_PACK);
+		checkSpriteFinders(minecraft);
 		folderProbe(minecraft);
+		checkSpriteFinders(minecraft);
 
 		int mipmaps = minecraft.options.mipmapLevels().get();
 		setMipmaps(minecraft, mipmaps == 4 ? 2 : 4);
@@ -130,6 +135,35 @@ public final class SelfTest {
 		reload(minecraft, "world mipmap restore", true);
 
 		reload(minecraft, "world final reload", true);
+	}
+
+	private static void checkSpriteFinders(final Minecraft minecraft) {
+		CompletableFuture.runAsync(() -> minecraft.getAtlasManager().forEach((id, atlas) -> {
+			Method finderMethod;
+			try {
+				finderMethod = atlas.getClass().getMethod("spriteFinder");
+			} catch (NoSuchMethodException e) {
+				return;
+			}
+
+			try {
+				Object finder = finderMethod.invoke(atlas);
+				Method find = finder.getClass().getMethod("find", float.class, float.class);
+				find.setAccessible(true);
+				int checked = 0;
+				int wrong = 0;
+				for (TextureAtlasSprite sprite : ((TextureAtlasAccessor)atlas).rpo$getTexturesByName().values()) {
+					checked++;
+					if (find.invoke(finder, (sprite.getU0() + sprite.getU1()) / 2.0F, (sprite.getV0() + sprite.getV1()) / 2.0F) != sprite) {
+						wrong++;
+					}
+				}
+
+				log("Fabric sprite finder of {}: {} sprites checked, {} wrong", id, checked, wrong);
+			} catch (ReflectiveOperationException | RuntimeException e) {
+				ResourcePackOptimizer.LOGGER.error("[selftest] Fabric sprite finder of {} failed", id, e);
+			}
+		}), minecraft).join();
 	}
 
 	private static void togglePack(final Minecraft minecraft, final String packId) throws InterruptedException {
