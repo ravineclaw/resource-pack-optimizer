@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.gui.screens.worldselection.SelectWorldScreen;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -76,6 +77,7 @@ public final class SelfTest {
 				boolean inWorld = minecraft.level != null;
 				RpoSettings.request(false);
 				reload(minecraft, "turned off", inWorld);
+				screenshot(minecraft, tag + "-world-off");
 				Path offDir = minecraft.gameDirectory.toPath().resolve("rpo-dump").resolve(tag + "-off");
 				dump(minecraft, offDir);
 				log("dumped atlases with the mod turned off to {}", offDir);
@@ -140,6 +142,7 @@ public final class SelfTest {
 		reload(minecraft, "world mipmap restore", true);
 
 		reload(minecraft, "world final reload", true);
+		screenshot(minecraft, System.getProperty("rpo.selftest.tag", "run") + "-world");
 	}
 
 	private static void checkSpriteFinders(final Minecraft minecraft) {
@@ -239,6 +242,28 @@ public final class SelfTest {
 			minecraft.options.mipmapLevels().set(levels);
 			minecraft.updateMaxMipLevel(levels);
 		}, minecraft).join();
+	}
+
+	private static void screenshot(final Minecraft minecraft, final String name) throws InterruptedException {
+		if (minecraft.level == null) {
+			return;
+		}
+
+		Thread.sleep(1000L);
+		Path file = minecraft.gameDirectory.toPath().resolve("rpo-dump").resolve(name + ".png");
+		CompletableFuture<Void> written = new CompletableFuture<>();
+		CompletableFuture.runAsync(() -> Screenshot.takeScreenshot(minecraft.gameRenderer.mainRenderTarget(), image -> {
+			try (image) {
+				Files.createDirectories(file.getParent());
+				image.writeToFile(file);
+			} catch (Exception e) {
+				ResourcePackOptimizer.LOGGER.error("[selftest] screenshot failed", e);
+			} finally {
+				written.complete(null);
+			}
+		}), minecraft).join();
+		written.join();
+		log("screenshot {}", file);
 	}
 
 	private static void dump(final Minecraft minecraft, final Path directory) {
