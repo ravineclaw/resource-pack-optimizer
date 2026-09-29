@@ -78,7 +78,7 @@ public final class ReuseGuard {
 	private ReuseGuard() {
 	}
 
-	private static String[] names(final Class<?>... classes) {
+	public static String[] names(final Class<?>... classes) {
 		String[] names = new String[classes.length];
 		for (int i = 0; i < classes.length; i++) {
 			names[i] = classes[i].getName();

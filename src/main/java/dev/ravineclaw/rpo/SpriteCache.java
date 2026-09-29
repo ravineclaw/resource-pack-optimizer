@@ -1,6 +1,7 @@
 package dev.ravineclaw.rpo;
 
 import com.mojang.blaze3d.platform.NativeImage;
+import com.mojang.blaze3d.platform.TextureUtil;
 import dev.ravineclaw.rpo.mixin.ResourceAccessor;
 import java.io.IOException;
 import java.io.InputStream;
@@ -19,8 +20,10 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import net.jpountz.xxhash.XXHash64;
 import net.jpountz.xxhash.XXHashFactory;
+import net.minecraft.client.renderer.texture.MipmapGenerator;
 import net.minecraft.client.renderer.texture.MipmapStrategy;
 import net.minecraft.client.renderer.texture.SpriteContents;
+import net.minecraft.client.renderer.texture.SpriteLoader;
 import net.minecraft.client.renderer.texture.atlas.SpriteResourceLoader;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.IoSupplier;
@@ -29,14 +32,7 @@ import org.jspecify.annotations.Nullable;
 import org.lwjgl.system.MemoryUtil;
 
 public final class SpriteCache {
-	public static final String[] CLASSES = {
-		"net.minecraft.client.renderer.texture.SpriteLoader",
-		"net.minecraft.client.renderer.texture.atlas.SpriteResourceLoader",
-		"net.minecraft.client.renderer.texture.SpriteContents",
-		"net.minecraft.client.renderer.texture.MipmapGenerator",
-		"com.mojang.blaze3d.platform.NativeImage",
-		"com.mojang.blaze3d.platform.TextureUtil"
-	};
+	public static final String[] CLASSES = ReuseGuard.names(SpriteLoader.class, SpriteResourceLoader.class, SpriteContents.class, MipmapGenerator.class, NativeImage.class, TextureUtil.class);
 	private static final long MIN_BUDGET = 128L << 20;
 	private static final long MAX_BUDGET = 512L << 20;
 	private static final long BUDGET = Math.clamp(Runtime.getRuntime().maxMemory() / 8L, MIN_BUDGET, MAX_BUDGET);
