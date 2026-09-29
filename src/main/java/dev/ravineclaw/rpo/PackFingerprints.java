@@ -327,10 +327,30 @@ public final class PackFingerprints {
 		return crc << 32 | size;
 	}
 
-	private record ZipSource(Object access, String prefix) implements Source {
+	private static final class ZipSource implements Source {
+		private final Object access;
+		private final String prefix;
+		private volatile @Nullable ZipFile indexedFile;
+		private volatile @Nullable ZipIndex index;
 		private static volatile Field accessField;
 		private static volatile Field prefixField;
 		private static volatile Method getOrCreate;
+
+		private ZipSource(final Object access, final String prefix) {
+			this.access = access;
+			this.prefix = prefix;
+		}
+
+		private ZipIndex index(final ZipFile zipFile) {
+			ZipIndex index = this.index;
+			if (index == null || this.indexedFile != zipFile) {
+				index = ZipIndex.of(zipFile);
+				this.index = index;
+				this.indexedFile = zipFile;
+			}
+
+			return index;
+		}
 
 		static Source of(final PackResources pack) {
 			try {
@@ -366,7 +386,7 @@ public final class PackFingerprints {
 				return hashMix(hashStart(), ABSENT);
 			}
 
-			return hashMix(hashString(this.prefix), ZipIndex.of(zipFile).contentHash());
+			return hashMix(hashString(this.prefix), this.index(zipFile).contentHash());
 		}
 
 		@Override
@@ -385,7 +405,7 @@ public final class PackFingerprints {
 			}
 
 			String name = type.getDirectory() + "/" + path;
-			ZipEntry entry = zipFile.getEntry(this.prefix.isEmpty() ? name : this.prefix + "/" + name);
+			ZipEntry entry = this.index(zipFile).entry(zipFile, this.prefix.isEmpty() ? name : this.prefix + "/" + name);
 			if (entry == null) {
 				out.add(ABSENT);
 			} else if (entry.isDirectory()) {

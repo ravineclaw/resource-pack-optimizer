@@ -4,9 +4,11 @@ import com.mojang.renderpearl.api.pipeline.ShaderSource;
 import com.mojang.renderpearl.api.pipeline.ShaderType;
 import com.mojang.renderpearl.backend.api.SpvModule;
 import com.mojang.renderpearl.frontend.shaders.SPIRVModule;
+import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
-import java.util.WeakHashMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
@@ -19,7 +21,7 @@ public final class SpirvCache {
 		"com.mojang.renderpearl.frontend.shaders.GlslCompiler",
 		"com.mojang.renderpearl.frontend.shaders.SPIRVModule"
 	};
-	private static final Map<ShaderSource, Map<Key, CompletableFuture<byte[]>>> CACHE = new WeakHashMap<>();
+	private static final List<Holder> CACHE = new ArrayList<>();
 	private static final AtomicInteger COMPILED = new AtomicInteger();
 	private static final AtomicInteger SHARED = new AtomicInteger();
 
@@ -28,6 +30,9 @@ public final class SpirvCache {
 
 	public interface Compile {
 		SpvModule call() throws Exception;
+	}
+
+	private record Holder(WeakReference<ShaderSource> source, Map<Key, CompletableFuture<byte[]>> compiled) {
 	}
 
 	private record Key(Object compiler, String name, String source, ShaderType type, ShaderDefines defines) {
@@ -46,10 +51,7 @@ public final class SpirvCache {
 			return original.call();
 		}
 
-		Map<Key, CompletableFuture<byte[]>> compiled;
-		synchronized (CACHE) {
-			compiled = CACHE.computeIfAbsent(shaderSource, s -> new ConcurrentHashMap<>());
-		}
+		Map<Key, CompletableFuture<byte[]>> compiled = compiledFor(shaderSource);
 
 		Key key = new Key(compiler, name, source, type, defines);
 		CompletableFuture<byte[]> mine = new CompletableFuture<>();
@@ -83,6 +85,21 @@ public final class SpirvCache {
 
 		COMPILED.incrementAndGet();
 		return module;
+	}
+
+	private static Map<Key, CompletableFuture<byte[]>> compiledFor(final ShaderSource shaderSource) {
+		synchronized (CACHE) {
+			CACHE.removeIf(holder -> holder.source().get() == null);
+			for (Holder holder : CACHE) {
+				if (holder.source().get() == shaderSource) {
+					return holder.compiled();
+				}
+			}
+
+			Holder holder = new Holder(new WeakReference<>(shaderSource), new ConcurrentHashMap<>());
+			CACHE.add(holder);
+			return holder.compiled();
+		}
 	}
 
 	public static String stats() {
