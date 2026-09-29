@@ -47,10 +47,16 @@ Download on [Modrinth](https://modrinth.com/mod/resource-pack-optimizer).
 - Reloads happen in the background with a small progress bar at the top, so you can keep moving, looking around and using menus
 - No forced 1 second minimum or 2 second fade on the loading screen
 - Only reloads what actually changed: textures, models, fonts, shaders, sounds and chunk rebuilds are kept when their files didn't change
-- Texture atlases are built off the main thread and uploaded over several frames, so there's no freeze
+- Parsed models are kept when only a texture atlas changed
+- Chunks keep drawing with the old textures until the rebuilt ones are ready, so they no longer disappear and fade back in after a texture change
+- Texture atlases are built off the main thread, with tiles built in parallel, and uploaded over several frames, so there's no freeze
 - Mipmaps are generated on all CPU cores
+- Decoded textures and mipmaps are cached in memory and on disk, so switching back to a pack or restarting the game skips decoding files that didn't change
+- Compiled shaders are cached on disk between restarts, and identical shaders are only compiled once
 - Zip packs are indexed, and vanilla assets and pack info are cached, so looking up files is much faster
 - Languages are loaded in the background, and changing language only reloads translations
 - Changing mipmap levels only rebuilds textures and models
-- The audio device stays open across reloads
+- The audio device stays open across reloads, and sounds keep playing when no sound files changed
 - Server pack checks are cached for the session
+- Works alongside Fabric API, Sodium, Sodium Extra and Iris without turning its speedups off
+- Can be turned on and off from Mod Menu without restarting the game
