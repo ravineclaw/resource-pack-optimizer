@@ -61,6 +61,30 @@ public final class ModCompat {
 			"net.fabricmc.fabric.mixin.client.rendering.LevelExtractorMixin",
 			new Rule(Set.of("afterBlockOutlineExtraction", "afterExtractLevel", "onReload"), ModCompat::noInvalidateListeners)
 		),
+		Map.entry(
+			"net.fabricmc.fabric.mixin.client.renderer.block.render.LevelRendererMixin",
+			new Rule(Set.of("beforeCreateRandom", "cancelCollectParts", "submitBreakingBlockModelProxy"), () -> true)
+		),
+		Map.entry(
+			"net.fabricmc.fabric.mixin.client.rendering.LevelRendererMixin",
+			new Rule(
+				Set.of(
+					"beforeRender",
+					"prepareChunkRenders",
+					"wrapRenderOpaqueTerrain",
+					"onCreatePoseStack",
+					"afterCollectSubmits",
+					"afterRenderSolidFeatures",
+					"afterRenderClassicTranslucentFeatures",
+					"afterRenderOitTranslucentFeatures",
+					"beforeRenderBlockOutline",
+					"beforeCollectGizmos",
+					"wrapRenderTranslucentTerrain",
+					"endMainRender"
+				),
+				() -> true
+			)
+		),
 		Map.entry("net.caffeinemc.mods.sodium.mixin.core.render.TextureAtlasMixin", new Rule(Set.of("deleteSpriteFinder"), () -> sodiumSpriteFinder() != null)),
 		Map.entry("net.caffeinemc.mods.sodium.mixin.features.textures.animations.tracking.TextureAtlasMixin", new Rule(Set.of("preReturnSprite"), () -> true)),
 		Map.entry("net.caffeinemc.mods.sodium.mixin.features.textures.animations.tracking.AtlasManagerMixin", new Rule(Set.of("catchUsedSprites"), () -> true)),

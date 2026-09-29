@@ -8,6 +8,7 @@
 		"ColorMapListenerMixin",
 		"CompilationCacheMixin",
 		"CompositePackResourcesAccessor",
+		"CompiledSectionMeshMixin",
 		"FilePackResourcesMixin",
 		"FileResourcesSupplierAccessor",
 		"FontAccessor",
@@ -19,6 +20,7 @@
 		"LanguageManagerMixin",
 		"LanguageSelectScreenMixin",
 		"LevelExtractorMixin",
+		"LevelRendererMixin",
 		"LoadingOverlayMixin",
 		"MinecraftMixin",
 		"ModelManagerMixin",
@@ -31,7 +33,9 @@
 		"PendingStitchResultsAccessor",
 		"ReloadableResourceManagerMixin",
 		"ReloadableTextureMixin",
+		"RenderSectionMixin",
 		"ResourceAccessor",
+		"SectionCompileTaskMixin",
 		"ShaderManagerMixin",
 		"SimpleReloadInstanceMixin",
 		"SoundEngineMixin",
@@ -43,7 +47,8 @@
 		"TextureAtlasMixin",
 		"TextureAtlasSpriteAccessor",
 		"TextureManagerMixin",
-		"VanillaPackResourcesMixin"
+		"VanillaPackResourcesMixin",
+		"ViewAreaMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
