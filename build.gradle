@@ -69,6 +69,9 @@ dependencies {
 	if (project.hasProperty("rpoSodium")) {
 		runtimeOnly "maven.modrinth:sodium:${project.findProperty('rpoSodium')}"
 	}
+	if (project.hasProperty("rpoSodiumExtra")) {
+		runtimeOnly "maven.modrinth:sodium-extra:${project.findProperty('rpoSodiumExtra')}"
+	}
 	if (project.hasProperty("rpoIris")) {
 		runtimeOnly "maven.modrinth:iris:${project.findProperty('rpoIris')}"
 	}
