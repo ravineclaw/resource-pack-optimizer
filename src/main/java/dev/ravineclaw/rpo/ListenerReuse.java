@@ -35,10 +35,25 @@ public final class ListenerReuse {
 				return CompletableFuture.completedFuture(Boolean.FALSE);
 			}
 
-			Collection<CompletableFuture<SpriteLoader.Preparations>> atlases =
-				((PendingStitchResultsAccessor)currentReload.get(AtlasManager.PENDING_STITCH)).rpo$getStitchFuturesById().values();
-			return CompletableFuture.allOf(atlases.toArray(CompletableFuture[]::new))
-				.thenApply(unused -> atlases.stream().allMatch(atlas -> AtlasReuse.isUploaded(atlas.join())));
+			return allAtlasesKept(currentReload);
 		}).exceptionally(t -> Boolean.FALSE);
+	}
+
+	public static CompletableFuture<Boolean> allAtlasesKept(final PreparableReloadListener.SharedState currentReload) {
+		Collection<CompletableFuture<SpriteLoader.Preparations>> atlases =
+			((PendingStitchResultsAccessor)currentReload.get(AtlasManager.PENDING_STITCH)).rpo$getStitchFuturesById().values();
+		CompletableFuture<Boolean> result = new CompletableFuture<>();
+		CompletableFuture<?>[] checks = new CompletableFuture<?>[atlases.size()];
+		int i = 0;
+		for (CompletableFuture<SpriteLoader.Preparations> atlas : atlases) {
+			checks[i++] = atlas.thenAccept(preparations -> {
+				if (!AtlasReuse.isUploaded(preparations)) {
+					result.complete(Boolean.FALSE);
+				}
+			});
+		}
+
+		CompletableFuture.allOf(checks).whenComplete((unused, t) -> result.complete(t == null));
+		return result;
 	}
 }

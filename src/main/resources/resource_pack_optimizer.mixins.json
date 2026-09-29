@@ -30,6 +30,7 @@
 		"PostChainCacheMixin",
 		"ReloadableResourceManagerMixin",
 		"ReloadableTextureMixin",
+		"ResourceAccessor",
 		"ShaderManagerMixin",
 		"SimpleReloadInstanceMixin",
 		"SoundEngineMixin",

@@ -1,6 +1,7 @@
 package dev.ravineclaw.rpo;
 
 import com.mojang.blaze3d.platform.NativeImage;
+import com.mojang.blaze3d.systems.RenderSystem;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -67,7 +68,7 @@ public final class SelfTest {
 				RpoSettings.request(false);
 				reload(minecraft, "turned off", inWorld);
 				Path offDir = minecraft.gameDirectory.toPath().resolve("rpo-dump").resolve(tag + "-off");
-				CompletableFuture.runAsync(() -> minecraft.getTextureManager().dumpAllSheets(offDir), minecraft).join();
+				dump(minecraft, offDir);
 				log("dumped atlases with the mod turned off to {}", offDir);
 				RpoSettings.request(true);
 				reload(minecraft, "turned on again", inWorld);
@@ -75,7 +76,7 @@ public final class SelfTest {
 			}
 
 			Path dumpDir = minecraft.gameDirectory.toPath().resolve("rpo-dump").resolve(tag);
-			CompletableFuture.runAsync(() -> minecraft.getTextureManager().dumpAllSheets(dumpDir), minecraft).join();
+			dump(minecraft, dumpDir);
 			log("dumped atlases to {}", dumpDir);
 
 			if (minecraft.level != null) {
@@ -183,6 +184,15 @@ public final class SelfTest {
 			minecraft.options.mipmapLevels().set(levels);
 			minecraft.updateMaxMipLevel(levels);
 		}, minecraft).join();
+	}
+
+	private static void dump(final Minecraft minecraft, final Path directory) {
+		CompletableFuture<Void> written = new CompletableFuture<>();
+		CompletableFuture.runAsync(() -> {
+			minecraft.getTextureManager().dumpAllSheets(directory);
+			RenderSystem.queueFencedTask(() -> written.complete(null));
+		}, minecraft).join();
+		written.join();
 	}
 
 	private static void reload(final Minecraft minecraft, final String label, final boolean waitForChunks) throws InterruptedException {
