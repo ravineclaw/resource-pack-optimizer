@@ -18,6 +18,7 @@
 		"LanguageManagerMixin",
 		"LanguageSelectScreenMixin",
 		"LevelExtractorMixin",
+		"LevelRendererAtlasMixin",
 		"LevelRendererMixin",
 		"LoadingOverlayMixin",
 		"MinecraftMixin",

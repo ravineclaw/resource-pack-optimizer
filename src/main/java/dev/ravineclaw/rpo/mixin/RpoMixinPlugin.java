@@ -3,6 +3,7 @@ package dev.ravineclaw.rpo.mixin;
 import dev.ravineclaw.rpo.RpoSettings;
 import java.util.List;
 import java.util.Set;
+import net.fabricmc.loader.api.FabricLoader;
 import org.objectweb.asm.tree.ClassNode;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
@@ -21,6 +22,10 @@ public class RpoMixinPlugin implements IMixinConfigPlugin {
 
 	@Override
 	public boolean shouldApplyMixin(final String targetClassName, final String mixinClassName) {
+		if (mixinClassName.endsWith(".LevelRendererAtlasMixin") && FabricLoader.getInstance().isModLoaded("sodium")) {
+			return false;
+		}
+
 		return !DISABLED || Boolean.getBoolean("rpo.selftest") && mixinClassName.endsWith(".SimpleReloadInstanceMixin");
 	}
 
