@@ -10,8 +10,8 @@ import com.mojang.renderpearl.api.textures.GpuTextureView;
 import dev.ravineclaw.rpo.AtlasBuilder;
 import dev.ravineclaw.rpo.AtlasReuse;
 import dev.ravineclaw.rpo.AtlasStaging;
-import dev.ravineclaw.rpo.FabricCompat;
 import dev.ravineclaw.rpo.FramePump;
+import dev.ravineclaw.rpo.ModCompat;
 import dev.ravineclaw.rpo.ReloadChanges;
 import dev.ravineclaw.rpo.ResourcePackOptimizer;
 import dev.ravineclaw.rpo.RpoSettings;
@@ -137,7 +137,7 @@ public abstract class TextureAtlasMixin extends AbstractTexture {
 		this.sprites = ImmutableList.copyOf(preparations.regions().values());
 		this.spriteUbos = staged.spriteUbos();
 		this.animatedTexturesStates = ImmutableList.copyOf(staged.states());
-		FabricCompat.atlasSwapped((TextureAtlas)(Object)this);
+		ModCompat.atlasSwapped((TextureAtlas)(Object)this);
 		FramePump.closeLater(old);
 		return true;
 	}
