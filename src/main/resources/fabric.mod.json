@@ -7,6 +7,11 @@
 	"authors": [
 		"ravineclaw"
 	],
+	"contact": {
+		"homepage": "https://modrinth.com/mod/resource-pack-optimizer",
+		"sources": "https://github.com/ravineclaw/resource-pack-optimizer",
+		"issues": "https://github.com/ravineclaw/resource-pack-optimizer/issues"
+	},
 	"license": "MIT",
 	"icon": "assets/resource_pack_optimizer/icon.png",
 	"environment": "client",

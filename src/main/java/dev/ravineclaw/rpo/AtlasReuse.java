@@ -55,7 +55,17 @@ public final class AtlasReuse {
 		}
 	}
 
+	public static void clear() {
+		UPLOADED.clear();
+		BUILT.clear();
+	}
+
 	public static void forgetUploaded(final ResourceLocation atlas) {
 		UPLOADED.remove(atlas);
+	}
+
+	public static void forget(final ResourceLocation atlas) {
+		UPLOADED.remove(atlas);
+		BUILT.remove(atlas);
 	}
 }

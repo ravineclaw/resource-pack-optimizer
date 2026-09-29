@@ -1,6 +1,7 @@
 package dev.ravineclaw.rpo.mixin;
 
 import dev.ravineclaw.rpo.PreparedLanguage;
+import dev.ravineclaw.rpo.RpoSettings;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -15,6 +16,9 @@ import net.minecraft.locale.Language;
 import net.minecraft.server.packs.PackResources;
 import net.minecraft.server.packs.resources.PreparableReloadListener;
 import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.util.Unit;
+import net.minecraft.util.profiling.Profiler;
+import net.minecraft.util.profiling.ProfilerFiller;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -48,6 +52,15 @@ public abstract class LanguageManagerMixin implements PreparableReloadListener {
 		final Executor taskExecutor,
 		final Executor reloadExecutor
 	) {
+		if (!RpoSettings.active()) {
+			return preparationBarrier.wait(Unit.INSTANCE).thenRunAsync(() -> {
+				ProfilerFiller reloadProfiler = Profiler.get();
+				reloadProfiler.push("listener");
+				this.onResourceManagerReload(manager);
+				reloadProfiler.pop();
+			}, reloadExecutor);
+		}
+
 		String code = this.currentCode;
 		return CompletableFuture.supplyAsync(() -> rpo$prepare(manager, code), taskExecutor)
 			.thenCompose(preparationBarrier::wait)
