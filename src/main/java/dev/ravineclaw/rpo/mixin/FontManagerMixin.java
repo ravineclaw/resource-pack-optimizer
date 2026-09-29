@@ -5,6 +5,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import dev.ravineclaw.rpo.InputRecording;
 import dev.ravineclaw.rpo.ListenerReuse;
 import dev.ravineclaw.rpo.ReuseGuard;
+import dev.ravineclaw.rpo.RpoSettings;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
@@ -42,7 +43,7 @@ public abstract class FontManagerMixin {
 			return;
 		}
 
-		if (!InputRecording.isTrackable(manager) || !ReuseGuard.untouched("fonts", ReuseGuard.FONTS)) {
+		if (!RpoSettings.active() || !InputRecording.isTrackable(manager) || !ReuseGuard.untouched("fonts", ReuseGuard.FONTS)) {
 			this.rpo$applied = null;
 			this.rpo$pending = null;
 			return;

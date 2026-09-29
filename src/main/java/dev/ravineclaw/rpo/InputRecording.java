@@ -103,8 +103,7 @@ public final class InputRecording {
 				Set<ResourceLocation> ids = key.stacks()
 					? other.listResourceStacks(key.directory(), key.selector()).keySet()
 					: other.listResources(key.directory(), key.selector()).keySet();
-				Listing now = listing(stack, ids, scratch);
-				if (now == null || !now.equals(entry.getValue())) {
+				if (!entry.getValue().matches(stack, ids, scratch)) {
 					return false;
 				}
 			}
@@ -170,22 +169,30 @@ public final class InputRecording {
 
 	private static long @Nullable [] signature(final PackStack stack, final ResourceLocation id, final LongArrayList scratch) {
 		scratch.clear();
-		appendSignature(stack.rpo$packs(), stack.rpo$filters(), stack.rpo$type(), id, scratch);
+		appendSignature(stack, id, scratch);
 		return scratch.contains(PackFingerprints.UNKNOWN) ? null : scratch.toLongArray();
 	}
 
-	private static void appendSignature(final List<PackResources> packs, final List<String> filters, final PackType type, final ResourceLocation id, final LongArrayList out) {
+	private static void appendSignature(final PackStack stack, final ResourceLocation id, final LongArrayList out) {
+		PackFingerprints.StackSources sources = stack.rpo$sources();
+		if (sources == null) {
+			sources = PackFingerprints.sources(stack.rpo$packs(), stack.rpo$type(), stack.rpo$filters());
+			stack.rpo$setSources(sources);
+		}
+
+		PackType type = stack.rpo$type();
 		ResourceLocation metadata = id.withPath(id.getPath() + ".mcmeta");
+		String path = id.getNamespace() + "/" + id.getPath();
+		String metadataPath = path + ".mcmeta";
 		int filterIndex = 0;
-		for (int i = 0; i < packs.size(); i++) {
-			boolean filtered = !filters.get(i).isEmpty();
-			if (filtered) {
+		for (int i : sources.candidates(id.getNamespace())) {
+			if (sources.filtered(i)) {
 				out.add(FILTER_MARKER - filterIndex++);
 			}
 
 			int mark = out.size();
-			PackFingerprints.append(packs.get(i), type, id, out);
-			PackFingerprints.append(packs.get(i), type, metadata, out);
+			sources.append(i, type, id, path, out);
+			sources.append(i, type, metadata, metadataPath, out);
 			boolean present = false;
 			for (int j = mark; j < out.size(); j++) {
 				present |= out.getLong(j) != PackFingerprints.ABSENT;
@@ -204,7 +211,7 @@ public final class InputRecording {
 		Arrays.sort(sorted);
 		scratch.clear();
 		for (ResourceLocation id : sorted) {
-			appendSignature(stack.rpo$packs(), stack.rpo$filters(), stack.rpo$type(), id, scratch);
+			appendSignature(stack, id, scratch);
 		}
 
 		return scratch.contains(PackFingerprints.UNKNOWN) ? null : new Listing(sorted, scratch.toLongArray());
@@ -214,6 +221,34 @@ public final class InputRecording {
 	}
 
 	private record Listing(ResourceLocation[] ids, long[] signatures) {
+		private boolean matches(final PackStack stack, final Set<ResourceLocation> now, final LongArrayList scratch) {
+			if (now.size() != this.ids.length) {
+				return false;
+			}
+
+			ResourceLocation[] sorted = now.toArray(ResourceLocation[]::new);
+			Arrays.sort(sorted);
+			if (!Arrays.equals(sorted, this.ids)) {
+				return false;
+			}
+
+			int position = 0;
+			for (ResourceLocation id : sorted) {
+				scratch.clear();
+				appendSignature(stack, id, scratch);
+				int length = scratch.size();
+				if (position + length > this.signatures.length
+					|| scratch.contains(PackFingerprints.UNKNOWN)
+					|| !Arrays.equals(scratch.elements(), 0, length, this.signatures, position, position + length)) {
+					return false;
+				}
+
+				position += length;
+			}
+
+			return position == this.signatures.length;
+		}
+
 		@Override
 		public boolean equals(final Object o) {
 			return o instanceof Listing other && Arrays.equals(this.ids, other.ids) && Arrays.equals(this.signatures, other.signatures);

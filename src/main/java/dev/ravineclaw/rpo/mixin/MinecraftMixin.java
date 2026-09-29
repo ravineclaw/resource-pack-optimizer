@@ -6,6 +6,8 @@ import com.llamalad7.mixinextras.sugar.Local;
 import dev.ravineclaw.rpo.BackgroundReload;
 import dev.ravineclaw.rpo.FramePump;
 import dev.ravineclaw.rpo.ReloadTimeline;
+import dev.ravineclaw.rpo.RpoSettings;
+import dev.ravineclaw.rpo.TerrainHandoff;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.LoadingOverlay;
 import net.minecraft.client.gui.screens.Overlay;
@@ -23,7 +25,7 @@ public abstract class MinecraftMixin {
 	)
 	private void rpo$reloadInBackground(final Minecraft minecraft, final Overlay overlay, final Operation<Void> original, @Local(argsOnly = true) final boolean isRecovery) {
 		BackgroundReload.clear();
-		if (!isRecovery && overlay instanceof LoadingOverlay loading) {
+		if (!isRecovery && RpoSettings.active() && overlay instanceof LoadingOverlay loading) {
 			BackgroundReload.start(loading);
 		} else {
 			original.call(minecraft, overlay);
@@ -48,5 +50,6 @@ public abstract class MinecraftMixin {
 	@Inject(method = "runTick", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/Minecraft;runAllTasks()V"))
 	private void rpo$pumpFrameWork(final CallbackInfo ci) {
 		FramePump.pump();
+		TerrainHandoff.tick();
 	}
 }
