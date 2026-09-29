@@ -102,6 +102,16 @@ public final class AtlasBuilder {
 		}, executor);
 	}
 
+	public static void clear() {
+		synchronized (PENDING) {
+			for (Built built : PENDING.values()) {
+				built.close();
+			}
+
+			PENDING.clear();
+		}
+	}
+
 	public static @Nullable Built take(final ResourceLocation atlas, final Map<ResourceLocation, TextureAtlasSprite> regions) {
 		synchronized (PENDING) {
 			Built built = PENDING.remove(atlas);

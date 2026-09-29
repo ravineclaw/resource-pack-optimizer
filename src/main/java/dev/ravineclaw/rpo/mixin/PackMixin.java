@@ -1,5 +1,6 @@
 package dev.ravineclaw.rpo.mixin;
 
+import dev.ravineclaw.rpo.RpoSettings;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -56,6 +57,10 @@ public abstract class PackMixin {
 		final int currentPackVersion,
 		final CallbackInfoReturnable<Pack.Metadata> cir
 	) {
+		if (!RpoSettings.active()) {
+			return;
+		}
+
 		String key = rpo$cacheKey(resources, currentPackVersion);
 		if (key != null) {
 			Pack.Metadata cached = RPO_METADATA_CACHE.get(key);
@@ -73,7 +78,7 @@ public abstract class PackMixin {
 		final CallbackInfoReturnable<Pack.Metadata> cir
 	) {
 		Pack.Metadata metadata = cir.getReturnValue();
-		if (metadata != null) {
+		if (metadata != null && RpoSettings.active()) {
 			String key = rpo$cacheKey(resources, currentPackVersion);
 			if (key != null) {
 				RPO_METADATA_CACHE.put(key, metadata);
